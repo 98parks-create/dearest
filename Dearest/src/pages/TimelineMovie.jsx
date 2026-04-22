@@ -230,10 +230,20 @@ function TimelineMovie() {
         await ffmpeg.load();
       }
 
+      // 전체 진행률 관리를 위한 현재 인덱스 참조 (setProgress 내부용)
+      let currentIdx = 0;
+      
       ffmpeg.setProgress(({ ratio }) => {
         let safeRatio = ratio;
         if (isNaN(safeRatio) || safeRatio < 0) safeRatio = 0;
-        setProgress(Math.min(Math.round(safeRatio * 95), 95));
+        if (safeRatio > 1) safeRatio = 1;
+        
+        // 전체 진행률 = (이전 완료된 영상들 비율) + (현재 영상의 진행도 비율)
+        const totalSegments = videos.length + 1; // 영상들 + 최종 병합/업로드
+        const baseProgress = (currentIdx / totalSegments) * 100;
+        const currentSegmentProgress = (safeRatio / totalSegments) * 100;
+        
+        setProgress(Math.min(Math.round(baseProgress + currentSegmentProgress), 99));
       });
 
       try {
@@ -244,6 +254,7 @@ function TimelineMovie() {
 
       // 1. 개별 영상 순차 처리 (메모리 점유 최소화)
       for (let i = 0; i < videos.length; i++) {
+        currentIdx = i;
         const video = videos[i];
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
@@ -277,10 +288,10 @@ function TimelineMovie() {
         ffmpeg.FS('unlink', `in_${i}.mp4`);
         if (video.audioBlob) ffmpeg.FS('unlink', `au_${i}.webm`);
         
-        // 개별 진행률 업데이트
-        setProgress(Math.round(((i + 1) / videos.length) * 30)); 
+        // 개별 진행률 업데이트는 setProgress 내부에서 처리됨
       }
 
+      currentIdx = videos.length; // 마지막 병합 단계 인덱스
       // 2. 가공된 TS 파일들을 하나로 결합 (매우 가벼운 작업)
       const listContent = videos.map((_, i) => `file 'temp_${i}.ts'`).join('\n');
       ffmpeg.FS('writeFile', 'list.txt', listContent);
@@ -399,7 +410,8 @@ function TimelineMovie() {
         </label>
 
         <div className="upload-warning-text" style={{ textAlign: 'center', fontSize: '0.85rem', color: '#888', marginTop: '1rem', padding: '0 1rem' }}>
-          ⚠️ 여러 영상을 한꺼번에 업로드 시 영상 길이에 따라 소요시간이 걸릴 수 있습니다.
+          ⚠️ 여러 영상을 한꺼번에 업로드 시 영상 길이에 따라 소요시간이 걸릴 수 있습니다.<br/>
+          💡 1분 이상의 긴 영상은 안정적인 환경(PC 등)에서 제작하시는 것을 추천합니다.
         </div>
 
         <div className="video-list">
