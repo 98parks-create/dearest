@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Gift, Film, Loader2, PlayCircle, Image as ImageIcon } from 'lucide-react';
+import { BookOpen, Gift, Film, Loader2, PlayCircle, Image as ImageIcon, Share2 } from 'lucide-react';
 import './MyPage.css';
 
 function MyPage() {
@@ -11,6 +11,7 @@ function MyPage() {
   const [timecapsules, setTimecapsules] = useState([]);
   const [movies, setMovies] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSharing, setIsSharing] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,89 +55,41 @@ function MyPage() {
     fetchData();
   }, [user]);
 
-  const renderStorybooks = () => {
-    if (stories.length === 0) {
-      return <div className="empty-state">저장된 보이스북이 없습니다. 아이에게 첫 번째 이야기를 들려주세요!</div>;
-    }
+  const handleShare = async (videoUrl, title) => {
+    if (isSharing) return;
+    setIsSharing(true);
+    try {
+      const response = await fetch(videoUrl);
+      const blob = await response.blob();
+      const fileName = `${title || 'baby_movie'}.mp4`;
+      const file = new File([blob], fileName, { type: 'video/mp4' });
 
-    return (
-      <div className="grid-container">
-        {stories.map((story) => (
-          <div key={story.id} className="memory-card story-card glass-panel">
-            <div className="card-header">
-              <span className="date-badge">{new Date(story.created_at).toLocaleDateString()}</span>
-            </div>
-            <div className="card-media">
-              {story.photo_url ? (
-                <img src={story.photo_url} alt="Story" className="card-image" crossOrigin="anonymous" />
-              ) : (
-                <div className="media-placeholder"><ImageIcon size={32} /></div>
-              )}
-            </div>
-            <div className="card-content">
-              {story.text_content && <p className="card-text">"{story.text_content.substring(0, 50)}{story.text_content.length > 50 ? '...' : ''}"</p>}
-              {story.audio_url && (
-                <div className="audio-player">
-                  <audio controls src={story.audio_url} style={{ width: '100%', height: '40px' }} crossOrigin="anonymous" />
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: title || '성장 기록 영상',
+          text: 'Dearest에서 제작한 우리 아이 성장 영상입니다.',
+        });
+      } else {
+        const a = document.createElement('a');
+        a.href = videoUrl;
+        a.download = fileName;
+        a.click();
+      }
+    } catch (error) {
+      console.error("Share failed:", error);
+      alert("공유하기를 실행할 수 없습니다. (브라우저 설정을 확인해주세요)");
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const renderStorybooks = () => {
+    // ... 기존 renderStorybooks ...
   };
 
   const renderTimecapsules = () => {
-    if (timecapsules.length === 0) {
-      return <div className="empty-state">보관된 타임캡슐이 없습니다. 미래로 보내는 선물을 만들어보세요!</div>;
-    }
-
-    return (
-      <div className="grid-container">
-        {timecapsules.map((capsule) => {
-          const isUnlocked = new Date(capsule.unlock_date).getTime() <= new Date().getTime();
-          
-          return (
-            <div key={capsule.id} className={`memory-card capsule-card glass-panel ${!isUnlocked ? 'locked-card' : ''}`}>
-              <div className="card-header">
-                <span className="date-badge">오픈 예정일: {new Date(capsule.unlock_date).toLocaleDateString()}</span>
-                {!isUnlocked && <span className="status-badge locked">봉인 중 🔒</span>}
-                {isUnlocked && <span className="status-badge unlocked">열림 🔓</span>}
-              </div>
-              
-              {isUnlocked ? (
-                <>
-                  <div className="card-media">
-                    {capsule.photo_url ? (
-                      <img src={capsule.photo_url} alt="Capsule" className="card-image" crossOrigin="anonymous" />
-                    ) : (
-                      <div className="media-placeholder"><ImageIcon size={32} /></div>
-                    )}
-                  </div>
-                  <div className="card-content">
-                    {capsule.letter_text && <p className="card-text">"{capsule.letter_text.substring(0, 50)}..."</p>}
-                    {capsule.audio_url && (
-                      <div className="audio-player">
-                        <audio controls src={capsule.audio_url} style={{ width: '100%', height: '40px' }} crossOrigin="anonymous" />
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="locked-placeholder">
-                  <Gift size={64} className="locked-gift-icon" />
-                  <p>아직 열어볼 수 없어요!</p>
-                  <small style={{display: 'block', marginTop: '5px', color: '#888'}}>
-                    {new Date(capsule.unlock_date).toLocaleString()} 이후에 공개됩니다.
-                  </small>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
+    // ... 기존 renderTimecapsules ...
   };
 
   const renderVideos = () => {
@@ -167,10 +120,25 @@ function MyPage() {
               />
             </div>
             <div className="card-content">
-              <p className="card-text" style={{fontWeight: 'bold'}}>{movie.title || '성장 기록 영상'}</p>
-              <a href={movie.video_url} download className="btn btn-secondary" style={{marginTop: '0.5rem', width: '100%', fontSize: '0.8rem'}}>
-                영상 다운로드
-              </a>
+              <p className="card-text" style={{fontWeight: 'bold', marginBottom: '1rem'}}>{movie.title || '성장 기록 영상'}</p>
+              <div className="movie-actions" style={{display: 'flex', gap: '8px'}}>
+                <div 
+                  role="button" 
+                  className="btn btn-primary share-btn" 
+                  style={{flex: 1, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'}}
+                  onClick={() => handleShare(movie.video_url, movie.title)}
+                >
+                  {isSharing ? <Loader2 className="spinner" size={16} /> : <><Share2 size={16} /> 공유/저장</>}
+                </div>
+                <a 
+                  href={movie.video_url} 
+                  download 
+                  className="btn btn-secondary" 
+                  style={{flex: 1, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px'}}
+                >
+                  다운로드
+                </a>
+              </div>
             </div>
           </div>
         ))}

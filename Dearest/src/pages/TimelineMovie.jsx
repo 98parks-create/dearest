@@ -261,18 +261,20 @@ function TimelineMovie() {
         
         await ffmpeg.FS('writeFile', `in_${i}.mp4`, await fetchFile(video.file));
         
-        let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
+        // 비디오/오디오 시간축 초기화 및 오디오 리샘플링 강제 적용
+        let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         if (video.audioBlob) {
           await ffmpeg.FS('writeFile', `au_${i}.webm`, await fetchFile(video.audioBlob));
           segmentArgs.push('-i', `au_${i}.webm`);
-          filter += `[1:a]anull[a]`;
+          // 녹음된 오디오를 표준 규격으로 리샘플링
+          filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         } else {
-          // 오디오 없는 경우 무음 생성
+          // 무음 트랙도 표준 규격으로 생성
           segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
-          filter += `[1:a]trim=duration=${video.duration}[a]`;
+          filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
         await ffmpeg.run(
@@ -280,7 +282,12 @@ function TimelineMovie() {
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
           '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-          '-r', '30', '-pix_fmt', 'yuv420p',
+          '-g', '30', // 고정 GOP
+          '-r', '30', 
+          '-fps_mode', 'cfr', // 고정 프레임 레이트 강제 (Stuttering 방지)
+          '-c:a', 'aac', '-ar', '44100', '-ac', '2', 
+          '-pix_fmt', 'yuv420p',
+          '-video_track_timescale', '30000', // 타임스케일 고정 (재생 멈춤 방지)
           `temp_${i}.ts`
         );
 
