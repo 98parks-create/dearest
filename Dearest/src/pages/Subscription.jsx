@@ -38,7 +38,7 @@ function Subscription() {
       const orderId = `order_${Date.now()}`;
 
       await tossPayments.requestPayment(method === 'card' ? '카드' : '가상계좌', {
-        amount: 5900,
+        amount: 2900,
         orderId: orderId,
         orderName: 'Dearest 프리미엄 구독 (1개월)',
         customerName: user.email?.split('@')[0] || '사용자',
@@ -74,6 +74,7 @@ function Subscription() {
           <div className="sub-header">
             <div className="premium-badge">PREMIUM</div>
             <h2>가장 소중한 기록, 무제한으로</h2>
+            <p style={{ color: 'var(--color-primary-peach)', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '0.5rem' }}>"커피 한 잔으로 아이에게 추억을 선물하세요"</p>
             <p>15초의 한계를 넘어 아이의 성장 과정을 한 편의 영화로 남기세요.</p>
           </div>
 
@@ -83,7 +84,7 @@ function Subscription() {
               <span>Dearest 프리미엄</span>
             </div>
             <div className="plan-price">
-              <span className="amount">₩5,900</span>
+              <span className="amount">₩2,900</span>
               <span className="period">/ 월</span>
             </div>
             <ul className="plan-benefits">
@@ -108,7 +109,7 @@ function Subscription() {
             <div className="bank-info-box">
               <div className="bank-row">
                 <span className="label">입금하실 금액</span>
-                <span className="value highlight">5,900원</span>
+                <span className="value highlight">2,900원</span>
               </div>
               <div className="bank-row">
                 <span className="label">은행명</span>

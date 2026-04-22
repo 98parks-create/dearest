@@ -145,6 +145,12 @@ function TimelineMovie() {
     }));
   };
 
+  const handleUploadClick = (e) => {
+    e.preventDefault();
+    alert("여러 개의 영상을 한꺼번에 업로드 시 화면이 멈추는 현상은 렉이 걸린 게 아니고, 영상을 업로드 중이라 그런 것이니 조금만 기다려주시면 영상이 한꺼번에 업로드됩니다.");
+    document.getElementById('video-upload').click();
+  };
+
   const handleVideoUpload = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -371,7 +377,7 @@ function TimelineMovie() {
 
       <div className="video-upload-section glass-panel">
         <div className="timeline-line"></div>
-        <label htmlFor="video-upload" className="upload-btn-wrapper" onClick={(e) => e.stopPropagation()}>
+        <div className="upload-btn-wrapper" onClick={handleUploadClick} style={{ cursor: 'pointer' }}>
           <div className="upload-icon-wrapper">
             <Plus size={48} color="var(--color-primary-peach)" />
           </div>
@@ -379,7 +385,7 @@ function TimelineMovie() {
             <p style={{ fontWeight: '700', fontSize: '1.1rem', marginBottom: '0.3rem' }}>여기를 클릭하여 영상 추가하기</p>
             <p style={{ fontSize: '0.85rem', color: '#888' }}>영상을 추가하면 제목과 자막을 넣을 수 있습니다.</p>
           </div>
-        </label>
+        </div>
 
         <div className="upload-warning-text" style={{ textAlign: 'center', fontSize: '0.85rem', color: '#888', marginTop: '1rem', padding: '0 1rem' }}>
           ⚠️ 여러 영상을 한꺼번에 업로드 시 영상 길이에 따라 소요시간이 걸릴 수 있습니다.<br />
