@@ -252,7 +252,7 @@ function TimelineMovie() {
         await ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
       } catch (e) { console.warn("Font load failed:", e); }
 
-      // 1. 개별 영상 순차 처리 및 실시간 롤링 병합 (메모리 점유 극소화)
+      // 1. 개별 영상 순차 처리 (고압축 TS 가공)
       for (let i = 0; i < videos.length; i++) {
         currentIdx = i;
         const video = videos[i];
@@ -264,7 +264,6 @@ function TimelineMovie() {
         let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
-        // 오디오 형식 감지
         let audioExt = 'webm';
         if (video.audioBlob) {
           audioExt = video.audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
@@ -279,18 +278,18 @@ function TimelineMovie() {
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 현재 조각 가공 (segment.mp4) - 용량 최적화를 위해 mp4 사용
+        // 고압축 TS로 가공 (메모리 절약)
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',
-          '-maxrate', '2M', '-bufsize', '4M',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32',
+          '-maxrate', '1.5M', '-bufsize', '3M',
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
-          '-f', 'mp4', '-movflags', '+faststart',
-          'segment.mp4'
+          '-f', 'mpegts',
+          `temp_${i}.ts`
         );
 
         // 가공 원본 즉시 삭제
@@ -298,24 +297,20 @@ function TimelineMovie() {
         if (video.audioBlob) {
           try { ffmpeg.FS('unlink', `au_${i}.${audioExt}`); } catch(e) {}
         }
-
-        // 롤링 병합: mp4들끼리 안전하게 결합
-        const files = ffmpeg.FS('readdir', '/');
-        if (files.includes('main.mp4')) {
-          ffmpeg.FS('writeFile', 'list.txt', "file 'main.mp4'\nfile 'segment.mp4'");
-          await ffmpeg.run('-f', 'concat', '-safe', '0', '-fflags', '+genpts', '-i', 'list.txt', '-c', 'copy', 'combined.mp4');
-          ffmpeg.FS('unlink', 'main.mp4');
-          ffmpeg.FS('unlink', 'segment.mp4');
-          ffmpeg.FS('unlink', 'list.txt');
-          ffmpeg.FS('rename', 'combined.mp4', 'main.mp4');
-        } else {
-          ffmpeg.FS('rename', 'segment.mp4', 'main.mp4');
-        }
       }
 
       currentIdx = videos.length; 
-      // 최종 결과물 확정
-      ffmpeg.FS('rename', 'main.mp4', 'output.mp4');
+      // 2. 고속 컨캣 프로토콜 병합 (가장 안정적)
+      const tsFiles = videos.map((_, i) => `temp_${i}.ts`).join('|');
+      await ffmpeg.run(
+        '-i', `concat:${tsFiles}`,
+        '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
+      );
+
+      // 3. 임시 TS 파일들 일괄 삭제
+      for (let i = 0; i < videos.length; i++) {
+        try { ffmpeg.FS('unlink', `temp_${i}.ts`); } catch(e) {}
+      }
 
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
