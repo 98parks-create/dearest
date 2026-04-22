@@ -215,6 +215,7 @@ function TimelineMovie() {
     }
     setIsExtracting(true);
     setProgress(0);
+    setStatus('엔진 초기화 중...');
     try {
       if (!ffmpegRef.current) {
         const { createFFmpeg } = window.FFmpeg;
@@ -227,6 +228,7 @@ function TimelineMovie() {
       const { fetchFile } = window.FFmpeg;
 
       if (!ffmpeg.isLoaded()) {
+        setStatus('엔진 로드 중...');
         await ffmpeg.load();
       }
 
@@ -276,8 +278,9 @@ function TimelineMovie() {
         const videoBuffer = await video.file.arrayBuffer();
         ffmpeg.FS('writeFile', `in_${i}.mp4`, new Uint8Array(videoBuffer));
         
-        // 480p 표준 화질 복구 (성공 확인됨)
-        let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
+        // 360p 이머전시 안정화 모드 (성공률 최우선)
+        setStatus(`${i + 1}번째 영상 가공 중...`);
+        let filter = `[0:v]scale=360:640:force_original_aspect_ratio=decrease,pad=360:640:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=h-100:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         let audioExt = 'webm';
@@ -292,16 +295,16 @@ function TimelineMovie() {
           filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 480p 고효율 인코딩
+        // 360p 생존 인코딩
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32',
-          '-maxrate', '1.5M', '-bufsize', '3M',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '38',
+          '-maxrate', '800k', '-bufsize', '1.5M',
           '-threads', '1',
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
-          '-c:a', 'aac', '-ar', '32000', '-ac', '2', 
+          '-c:a', 'aac', '-ar', '24000', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
           '-f', 'mpegts',
           `temp_${i}.ts`
@@ -325,6 +328,7 @@ function TimelineMovie() {
       }
 
       // 최종 병합 실행
+      setStatus('최종 영상 이어 붙이는 중...');
       await ffmpeg.run(
         '-f', 'concat', '-safe', '0', '-i', 'list.txt',
         '-c', 'copy', '-y', '-movflags', '+faststart', 'output.mp4'
@@ -340,6 +344,7 @@ function TimelineMovie() {
       const outUrl = URL.createObjectURL(outBlob);
       
       const storagePath = `${user.id}/movie_${Date.now()}.mp4`;
+      setStatus('서버로 저장 중 (잠시만 기다려주세요)...');
       const { error: uploadError } = await supabase.storage.from('dearest_media').upload(`movies/${storagePath}`, outBlob);
       if (uploadError) throw new Error(`서버 저장 실패: ${uploadError.message} (용량이 부족할 수 있습니다)`);
 
@@ -422,6 +427,7 @@ function TimelineMovie() {
               <div className="progress-fill" style={{ width: `${progress}%` }}></div>
             </div>
             <p>{progress}% 완료</p>
+            <p className="status-text" style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>{status}</p>
           </div>
         </div>
       )}
