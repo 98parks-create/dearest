@@ -261,7 +261,8 @@ function TimelineMovie() {
         
         await ffmpeg.FS('writeFile', `in_${i}.mp4`, await fetchFile(video.file));
         
-        let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
+        // 480p 초경량 가공 (메모리 부족 방지 최후의 보루)
+        let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         let audioExt = 'webm';
@@ -272,27 +273,27 @@ function TimelineMovie() {
         if (video.audioBlob) {
           await ffmpeg.FS('writeFile', `au_${i}.${audioExt}`, await fetchFile(video.audioBlob));
           segmentArgs.push('-i', `au_${i}.${audioExt}`);
-          filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
+          filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
         } else {
-          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
-          filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
+          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=32000:cl=stereo:d=${video.duration}`);
+          filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 고압축 TS로 가공 (메모리 절약)
+        // 초경량 설정 (CRF 35, 1Mbps)
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32',
-          '-maxrate', '1.5M', '-bufsize', '3M',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35',
+          '-maxrate', '1M', '-bufsize', '2M',
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
-          '-c:a', 'aac', '-ar', '44100', '-ac', '2', 
+          '-c:a', 'aac', '-ar', '32000', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
           '-f', 'mpegts',
           `temp_${i}.ts`
         );
 
-        // 가공 원본 즉시 삭제
+        // 가공 원본 즉시 삭제 (메모리 즉각 반환)
         ffmpeg.FS('unlink', `in_${i}.mp4`);
         if (video.audioBlob) {
           try { ffmpeg.FS('unlink', `au_${i}.${audioExt}`); } catch(e) {}
@@ -300,7 +301,7 @@ function TimelineMovie() {
       }
 
       currentIdx = videos.length; 
-      // 2. 고속 컨캣 프로토콜 병합 (가장 안정적)
+      // 2. 고속 컨캣 프로토콜 병합
       const tsFiles = videos.map((_, i) => `temp_${i}.ts`).join('|');
       await ffmpeg.run(
         '-i', `concat:${tsFiles}`,
