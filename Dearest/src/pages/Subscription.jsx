@@ -29,6 +29,7 @@ function Subscription() {
   const handleFinalizeSubscription = () => {
     // 이제 자동 업데이트가 아닌, 신청 완료 화면만 보여줍니다.
     setStep('success');
+    window.scrollTo(0, 0);
   };
 
   const requestPayment = async (method) => {
@@ -159,7 +160,7 @@ function Subscription() {
 
       {/* 4단계: 성공 */}
       {step === 'success' && (
-        <div className="success-section fade-in">
+        <div className="success-container fade-in">
           <div className="success-card glass-panel" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
             <div className="success-icon-wrapper" style={{ 
               background: '#fff4f0', 
