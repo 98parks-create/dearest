@@ -276,8 +276,8 @@ function TimelineMovie() {
         const videoBuffer = await video.file.arrayBuffer();
         ffmpeg.FS('writeFile', `in_${i}.mp4`, new Uint8Array(videoBuffer));
         
-        // 240p 초정밀 생존 모드 (모바일 최후의 선택)
-        let filter = `[0:v]scale=240:426:force_original_aspect_ratio=decrease,pad=240:426:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=18:x=(w-text_w)/2:y=h-80:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
+        // 480p 표준 화질 복구 (성공 확인됨)
+        let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         let audioExt = 'webm';
@@ -286,22 +286,22 @@ function TimelineMovie() {
           const audioBuffer = await video.audioBlob.arrayBuffer();
           ffmpeg.FS('writeFile', `au_${i}.${audioExt}`, new Uint8Array(audioBuffer));
           segmentArgs.push('-i', `au_${i}.${audioExt}`);
-          filter += `[1:a]aresample=16000,asetpts=PTS-STARTPTS[a]`;
+          filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
         } else {
-          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=16000:cl=stereo:d=${video.duration}`);
-          filter += `[1:a]aresample=16000,asetpts=PTS-STARTPTS[a]`;
+          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=32000:cl=stereo:d=${video.duration}`);
+          filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 극한의 압축 (CRF 45)
+        // 480p 고효율 인코딩
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '45',
-          '-maxrate', '300k', '-bufsize', '600k',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32',
+          '-maxrate', '1.5M', '-bufsize', '3M',
           '-threads', '1',
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
-          '-c:a', 'aac', '-ar', '16000', '-ac', '2', 
+          '-c:a', 'aac', '-ar', '32000', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
           '-f', 'mpegts',
           `temp_${i}.ts`
@@ -340,15 +340,19 @@ function TimelineMovie() {
       const outUrl = URL.createObjectURL(outBlob);
       
       const storagePath = `${user.id}/movie_${Date.now()}.mp4`;
-      await supabase.storage.from('dearest_media').upload(`movies/${storagePath}`, outBlob);
+      const { error: uploadError } = await supabase.storage.from('dearest_media').upload(`movies/${storagePath}`, outBlob);
+      if (uploadError) throw new Error(`서버 저장 실패: ${uploadError.message} (용량이 부족할 수 있습니다)`);
+
       const { data: { publicUrl } } = supabase.storage.from('dearest_media').getPublicUrl(`movies/${storagePath}`);
-      await supabase.from('movies').insert({ user_id: user.id, video_url: publicUrl, title: movieTitle || '성장 기록 영상' });
+      const { error: dbError } = await supabase.from('movies').insert({ user_id: user.id, video_url: publicUrl, title: movieTitle || '성장 기록 영상' });
+      if (dbError) throw new Error(`DB 기록 실패: ${dbError.message}`);
 
       setProgress(100);
 
       const shareFileName = `${movieTitle || 'baby_movie'}.mp4`;
       const file = new File([outBlob], shareFileName, { type: 'video/mp4' });
 
+      // 공유 창 호출
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
@@ -357,10 +361,11 @@ function TimelineMovie() {
             text: `우리아이 성장 영상 확인하기: ${window.location.origin}`,
           });
         } catch (shareError) {
-          if (shareError.name === 'AbortError') return;
-          const a = document.createElement('a');
-          a.href = outUrl; a.download = shareFileName;
-          a.click();
+          if (shareError.name !== 'AbortError') {
+            const a = document.createElement('a');
+            a.href = outUrl; a.download = shareFileName;
+            a.click();
+          }
         }
       } else {
         const a = document.createElement('a');
@@ -370,7 +375,8 @@ function TimelineMovie() {
       
       try { ffmpeg.FS('unlink', 'output.mp4'); } catch(e) {}
       
-      alert('영상이 제작되었습니다!');
+      alert('성장 영상이 제작되어 마이페이지에 저장되었습니다!');
+      window.location.href = '/mypage'; // 마이페이지로 자동 이동
     } catch (error) {
       console.error('Merge failed:', error);
       const errorLogs = lastLogs.join('\n');
