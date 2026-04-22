@@ -215,21 +215,30 @@ function TimelineMovie() {
     }
     setIsExtracting(true);
     setProgress(0);
-    setStatus('엔진 초기화 중...');
+    setStatus('준비 중...');
     try {
+      if (!window.FFmpeg) {
+        throw new Error('엔진 라이브러리가 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
+      }
+
+      const { createFFmpeg } = window.FFmpeg;
       if (!ffmpegRef.current) {
-        const { createFFmpeg } = window.FFmpeg;
+        setStatus('엔진 초기화 중...');
         ffmpegRef.current = createFFmpeg({
           log: true,
           corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
         });
       }
       const ffmpeg = ffmpegRef.current;
-      const { fetchFile } = window.FFmpeg;
 
       if (!ffmpeg.isLoaded()) {
-        setStatus('엔진 로드 중...');
-        await ffmpeg.load();
+        setStatus('엔진 로드 중 (최대 15초)...');
+        // 모바일 네트워크 불안정 대비 타임아웃 (15초)
+        const loadPromise = ffmpeg.load();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('엔진 로딩 시간이 초과되었습니다. 새로고침 후 다시 시도해주세요.')), 15000)
+        );
+        await Promise.race([loadPromise, timeoutPromise]);
       }
 
       // 전체 진행률 관리를 위한 현재 인덱스 참조 (setProgress 내부용)
@@ -248,12 +257,7 @@ function TimelineMovie() {
         setProgress(Math.min(Math.round(baseProgress + currentSegmentProgress), 99));
       });
 
-      // 0. 엔진 사전 준비 및 폰트 고정 (메모리 누수 방지)
-      if (!ffmpeg.isLoaded()) {
-        setStatus('엔진 로딩 중...');
-        await ffmpeg.load();
-      }
-      
+      // 0. 폰트 준비 (메모리 누수 방지)
       try {
         const files = ffmpeg.FS('readdir', '/');
         if (!files.includes('font.ttf')) {
