@@ -293,7 +293,7 @@ function TimelineMovie() {
 
       <div className="video-upload-section glass-panel">
         <div className="timeline-line"></div>
-        <div className="upload-btn-wrapper" onClick={(e) => { e.preventDefault(); document.getElementById('video-upload').click(); }}>
+        <label htmlFor="video-upload" className="upload-btn-wrapper">
           <input type="file" id="video-upload" multiple accept="video/*" style={{ display: 'none' }} onChange={handleVideoUpload} />
           <div className="upload-icon-wrapper">
             <Plus size={48} color="var(--color-primary-peach)" />
@@ -302,7 +302,7 @@ function TimelineMovie() {
             <p style={{ fontWeight: '700', fontSize: '1.1rem', marginBottom: '0.3rem' }}>여기를 클릭하여 영상 추가하기</p>
             <p style={{ fontSize: '0.85rem', color: '#888' }}>영상을 추가하면 제목과 자막을 넣을 수 있습니다.</p>
           </div>
-        </div>
+        </label>
 
         <div className="video-list">
           {videos.map((video, index) => (
