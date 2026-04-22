@@ -89,36 +89,31 @@ function TimelineMovie() {
     }));
   };
 
-  const handlePreviewEnd = () => {
-    if (recording) {
-      if (currentPreviewIndex < videos.length - 1) {
-        setCurrentPreviewIndex(prev => prev + 1);
-      } else {
-        stopRecording();
-      }
-    }
-  };
-
   const handleVideoUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     
     setIsUploading(true);
     
-    // UI 반영을 위해 micro-task 사용
-    await new Promise(resolve => setTimeout(resolve, 0));
+    // UI 반영을 위해 확실한 틈을 줌 (200ms)
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     const limitDuration = profile?.is_subscribed ? 600 : 15;
     try {
-      const newVideos = [...videos];
-      let newTotalDuration = totalDuration;
+      let currentVideos = [...videos];
+      let currentTotalDuration = totalDuration;
+
       for (const file of files) {
+        // 각 파일 처리 사이에 틈을 주어 UI가 멈추지 않게 함
         const duration = await getVideoDuration(file);
-        if (newTotalDuration + duration > limitDuration) {
-          alert(`제한 시간(${limitDuration}초)을 초과한 영상은 제외되었습니다.`);
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        if (currentTotalDuration + duration > limitDuration) {
+          alert(`제한 시간(${limitDuration}초)을 초과한 영상(${file.name})은 제외되었습니다.`);
           continue;
         }
-        newVideos.push({
+
+        currentVideos.push({
           id: Math.random().toString(36).substr(2, 9),
           file,
           preview: URL.createObjectURL(file),
@@ -127,10 +122,11 @@ function TimelineMovie() {
           audioBlob: null,
           audioUrl: null
         });
-        newTotalDuration += duration;
+        currentTotalDuration += duration;
       }
-      setVideos(newVideos);
-      setTotalDuration(newTotalDuration);
+      
+      setVideos(currentVideos);
+      setTotalDuration(currentTotalDuration);
     } catch (error) {
       console.error('Upload error:', error);
       alert('영상을 불러오는 중 오류가 발생했습니다.');
@@ -335,8 +331,8 @@ function TimelineMovie() {
                 <video src={video.preview} className="video-thumb" playsInline muted autoPlay loop />
                 <div className="duration-tag">{video.duration.toFixed(1)}s</div>
                 <div className="video-move-controls">
-                  <button onClick={() => moveVideo(index, -1)} disabled={index === 0}><ChevronUp size={14} /></button>
-                  <button onClick={() => moveVideo(index, 1)} disabled={index === videos.length - 1}><ChevronDown size={14} /></button>
+                  <button type="button" onClick={(e) => { e.preventDefault(); moveVideo(index, -1); }} disabled={index === 0}><ChevronUp size={14} /></button>
+                  <button type="button" onClick={(e) => { e.preventDefault(); moveVideo(index, 1); }} disabled={index === videos.length - 1}><ChevronDown size={14} /></button>
                 </div>
               </div>
               <div className="video-info">
@@ -348,22 +344,22 @@ function TimelineMovie() {
                 
                 <div className="item-voice-control">
                   {recordingVideoId === video.id ? (
-                    <button className="voice-btn recording" onClick={stopRecording}>
+                    <button type="button" className="voice-btn recording" onClick={(e) => { e.preventDefault(); stopRecording(); }}>
                       <Square size={14} /> 녹음 중단
                     </button>
                   ) : video.audioUrl ? (
                     <div className="voice-added-group">
                       <audio src={video.audioUrl} controls className="mini-audio-item" />
-                      <button className="voice-del-btn" onClick={() => removeAudio(video.id)}>삭제</button>
+                      <button type="button" className="voice-del-btn" onClick={(e) => { e.preventDefault(); removeAudio(video.id); }}>삭제</button>
                     </div>
                   ) : (
-                    <button className="voice-btn" onClick={() => startRecording(video.id)}>
+                    <button type="button" className="voice-btn" onClick={(e) => { e.preventDefault(); startRecording(video.id); }}>
                       <Mic size={14} /> 목소리 입히기
                     </button>
                   )}
                 </div>
               </div>
-              <button className="remove-btn" onClick={() => removeVideo(video.id)}><X size={20} /></button>
+              <button type="button" className="remove-btn" onClick={(e) => { e.preventDefault(); removeVideo(video.id); }}><X size={20} /></button>
             </div>
           ))}
         </div>
@@ -374,7 +370,7 @@ function TimelineMovie() {
               <label>🎬 영화 제목</label>
               <input type="text" className="movie-title-input" placeholder="예: 우리 아이의 첫 걸음마" value={movieTitle} onChange={(e) => setMovieTitle(e.target.value)} />
             </div>
-            <button className="btn btn-primary extract-btn" onClick={extractVideo} disabled={isExtracting}>
+            <button type="button" className="btn btn-primary extract-btn" onClick={(e) => { e.preventDefault(); extractVideo(); }} disabled={isExtracting}>
               {isExtracting ? (
                 <div className="progress-status">
                   <Loader2 className="spinner" size={24} />
