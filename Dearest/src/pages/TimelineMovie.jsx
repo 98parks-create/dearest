@@ -264,16 +264,20 @@ function TimelineMovie() {
 
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
+        
+        // 비디오 필터: 스케일링 + 패딩 + 자막
         videoFilter += `[${vInput}:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v${i}];`;
-
+        
+        // 오디오 필터: 녹음본이 없어도 무조건 무음 트랙을 생성하여 concat 오류 방지
         if (aInput !== -1) {
           videoFilter += `[${aInput}:a]anull[a${i}];`;
         } else {
-          videoFilter += `[${vInput}:a]anull[a${i}];`;
+          // 원본 영상의 소리 유무와 상관없이 가상 무음 생성 (가장 안전함)
+          videoFilter += `aevalsrc=0:d=${video.duration}[a${i}];`;
         }
         concatInput += `[v${i}][a${i}]`;
       }
-
+      
       videoFilter += `${concatInput}concat=n=${videos.length}:v=1:a=1[v_out][a_out]`;
       args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', 'output.mp4');
 
