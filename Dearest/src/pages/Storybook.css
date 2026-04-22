@@ -1,7 +1,17 @@
 .storybook-container {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2rem;
+  text-align: center;
+}
+
+.storybook-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .storybook-header h2 {
@@ -27,6 +37,8 @@
   padding: 2rem;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  text-align: center;
   gap: 1.5rem;
 }
 
@@ -67,6 +79,7 @@
 .message-input {
   min-height: 120px;
   resize: vertical;
+  text-align: center;
 }
 
 .controls {
@@ -132,6 +145,7 @@
 .saved-stories-list h4 {
   color: var(--color-primary-peach);
   margin-bottom: 1rem;
+  text-align: center;
 }
 
 .story-items {
