@@ -65,11 +65,19 @@ function MyPage() {
       const file = new File([blob], fileName, { type: 'video/mp4' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: title || '성장 기록 영상',
-          text: `우리아이 성장 영상 확인하기: ${window.location.origin}`,
-        });
+        try {
+          await navigator.share({
+            files: [file],
+            title: title || '성장 기록 영상',
+            text: `우리아이 성장 영상 확인하기: ${window.location.origin}`,
+          });
+        } catch (shareError) {
+          if (shareError.name === 'AbortError') return;
+          const a = document.createElement('a');
+          a.href = videoUrl;
+          a.download = fileName;
+          a.click();
+        }
       } else {
         const a = document.createElement('a');
         a.href = videoUrl;
@@ -77,6 +85,10 @@ function MyPage() {
         a.click();
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Share cancelled by user');
+        return;
+      }
       console.error("Share failed:", error);
       alert("공유하기를 실행할 수 없습니다.");
     } finally {

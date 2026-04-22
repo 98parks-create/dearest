@@ -333,9 +333,10 @@ function TimelineMovie() {
           await navigator.share({
             files: [file],
             title: movieTitle || '성장 기록 영상',
-            text: 'Dearest에서 제작한 우리 아이 성장 영상입니다.',
+            text: `우리아이 성장 영상 확인하기: ${window.location.origin}`,
           });
         } catch (shareError) {
+          if (shareError.name === 'AbortError') return;
           const a = document.createElement('a');
           a.href = outUrl; a.download = shareFileName;
           a.click();
