@@ -44,6 +44,18 @@ function TimelineMovie() {
     return () => ScrollTrigger.getAll().forEach(t => t.kill());
   }, [videos.length]);
 
+  // 녹음 중에는 메모리 절약을 위해 모든 미리보기 영상 일시정지
+  useEffect(() => {
+    const allVideos = document.querySelectorAll('.video-thumb');
+    if (recordingVideoId) {
+      allVideos.forEach(v => v.pause());
+    } else {
+      allVideos.forEach(v => {
+        try { v.play().catch(() => {}); } catch(e) {}
+      });
+    }
+  }, [recordingVideoId]);
+
   const startRecording = async (videoId) => {
     if (!profile?.is_subscribed) {
       alert('목소리 녹음 기능은 프리미엄 전용입니다. 멤버십을 업그레이드 해주세요!');
@@ -263,7 +275,7 @@ function TimelineMovie() {
       }
 
       videoFilter += `${concatInput}concat=n=${videos.length}:v=1:a=1[v_out][a_out]`;
-      args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', 'output.mp4');
+      args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', 'output.mp4');
 
       await ffmpeg.run(...args);
       
@@ -396,13 +408,9 @@ function TimelineMovie() {
                   className="video-thumb" 
                   playsInline 
                   muted 
-                  preload="metadata"
-                  onMouseOver={(e) => e.target.play()} 
-                  onMouseOut={(e) => { e.target.pause(); e.target.currentTime = 0; }} 
-                  onClick={(e) => {
-                    if (e.target.paused) e.target.play();
-                    else { e.target.pause(); e.target.currentTime = 0; }
-                  }}
+                  autoPlay
+                  loop
+                  preload="auto"
                 />
                 <div className="duration-tag">{video.duration.toFixed(1)}s</div>
                 <div className="video-move-controls">
