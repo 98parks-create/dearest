@@ -249,16 +249,24 @@ function TimelineMovie() {
       });
 
       // 0. 엔진 사전 준비 및 폰트 고정 (메모리 누수 방지)
-      if (!ffmpeg.isLoaded()) await ffmpeg.load();
+      if (!ffmpeg.isLoaded()) {
+        setStatus('엔진 로딩 중...');
+        await ffmpeg.load();
+      }
       
       try {
         const files = ffmpeg.FS('readdir', '/');
         if (!files.includes('font.ttf')) {
+          setStatus('글꼴 데이터 준비 중...');
           const fontResponse = await fetch('/font.ttf');
+          if (!fontResponse.ok) throw new Error('폰트 파일을 찾을 수 없습니다.');
           const fontBuffer = await fontResponse.arrayBuffer();
           ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
         }
-      } catch (e) { console.warn("Font preparation failed:", e); }
+      } catch (e) { 
+        console.warn("Font preparation failed:", e);
+        setStatus('글꼴 없이 진행 중...');
+      }
 
       // 엔진 로그 캡처 준비
       let lastLogs = [];
@@ -279,8 +287,8 @@ function TimelineMovie() {
         ffmpeg.FS('writeFile', `in_${i}.mp4`, new Uint8Array(videoBuffer));
         
         // 360p 이머전시 안정화 모드 (성공률 최우선)
-        setStatus(`${i + 1}번째 영상 가공 중...`);
-        let filter = `[0:v]scale=360:640:force_original_aspect_ratio=decrease,pad=360:640:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=h-100:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;;
+        setStatus(`${i + 1}번째 영상 처리 중...`);
+        let filter = `[0:v]scale=360:640:force_original_aspect_ratio=decrease,pad=360:640:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=h-100:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         let audioExt = 'webm';
