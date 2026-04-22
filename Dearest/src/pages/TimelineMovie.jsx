@@ -42,7 +42,7 @@ function TimelineMovie() {
       }
     });
     return () => ScrollTrigger.getAll().forEach(t => t.kill());
-  }, [videos]);
+  }, [videos.length]);
 
   const startRecording = async (videoId) => {
     if (!profile?.is_subscribed) {
@@ -330,9 +330,17 @@ function TimelineMovie() {
               </div>
               <div className="video-info">
                 <div className="video-name">{video.file.name}</div>
-                <div className="comment-group">
-                  <label>💌 영상 자막</label>
-                  <input type="text" className="comment-input" placeholder="자막 입력..." value={video.comment} onChange={(e) => handleCommentChange(video.id, e.target.value)} />
+                <div className="comment-group" onClick={(e) => e.stopPropagation()}>
+                  <label onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>💌 영상 자막</label>
+                  <input 
+                    type="text" 
+                    className="comment-input" 
+                    placeholder="자막 입력..." 
+                    value={video.comment} 
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                    onChange={(e) => handleCommentChange(video.id, e.target.value)} 
+                  />
                 </div>
                 
                 <div className="item-voice-control">
