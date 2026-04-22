@@ -412,7 +412,16 @@ function TimelineMovie() {
               style={{ pointerEvents: isExtracting ? 'none' : 'auto', cursor: isExtracting ? 'default' : 'pointer' }}
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isExtracting) extractVideo(); }}
             >
-              {isExtracting ? <Loader2 className="spinner" size={24} /> : <><Film size={18} /> 영화 만들기</>}
+              {isExtracting ? (
+                <div className="progress-status" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Loader2 className="spinner" size={24} />
+                  <div className="progress-info">
+                    <span className="progress-label">영화 제작 중... {progress}%</span>
+                  </div>
+                </div>
+              ) : (
+                <><Film size={18} /> 영화 만들기 & 다운로드</>
+              )}
             </div>
           </div>
         )}
