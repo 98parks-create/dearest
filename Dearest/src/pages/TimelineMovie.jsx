@@ -269,7 +269,8 @@ function TimelineMovie() {
         const videoBuffer = await video.file.arrayBuffer();
         ffmpeg.FS('writeFile', `in_${i}.mp4`, new Uint8Array(videoBuffer));
         
-        let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
+        // 360p 이머전시 안정화 (모바일 최종 보루)
+        let filter = `[0:v]scale=360:640:force_original_aspect_ratio=decrease,pad=360:640:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=h-100:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         let audioExt = 'webm';
@@ -278,32 +279,33 @@ function TimelineMovie() {
           const audioBuffer = await video.audioBlob.arrayBuffer();
           ffmpeg.FS('writeFile', `au_${i}.${audioExt}`, new Uint8Array(audioBuffer));
           segmentArgs.push('-i', `au_${i}.${audioExt}`);
-          filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
+          filter += `[1:a]aresample=24000,asetpts=PTS-STARTPTS[a]`;
         } else {
-          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=32000:cl=stereo:d=${video.duration}`);
-          filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
+          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=24000:cl=stereo:d=${video.duration}`);
+          filter += `[1:a]aresample=24000,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 초경량 인코딩 (모바일 RAM 생존 모드)
+        // 초경량 생존 인코딩 (CRF 38)
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35',
-          '-maxrate', '800k', '-bufsize', '1.5M', // 비트레이트 더욱 강화된 캡
-          '-threads', '1', // 단일 스레드로 안정성 확보
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '38',
+          '-maxrate', '500k', '-bufsize', '1M',
+          '-threads', '1',
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
-          '-c:a', 'aac', '-ar', '32000', '-ac', '2', 
+          '-c:a', 'aac', '-ar', '24000', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
           '-f', 'mpegts',
           `temp_${i}.ts`
         );
 
-        // 즉각적인 메모리 해제
+        // 메모리 해제 및 짧은 휴식 (브라우저 과부하 방지)
         ffmpeg.FS('unlink', `in_${i}.mp4`);
         if (video.audioBlob) {
           try { ffmpeg.FS('unlink', `au_${i}.${audioExt}`); } catch(e) {}
         }
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
 
       currentIdx = videos.length; 
@@ -357,14 +359,13 @@ function TimelineMovie() {
       alert('영상이 제작되었습니다!');
     } catch (error) {
       console.error('Merge failed:', error);
-      // 에러 발생 시 모든 임시 파일 강제 삭제 (클린업)
       try {
         const files = ffmpegRef.current.FS('readdir', '/');
         const temps = files.filter(f => f.endsWith('.ts') || f.endsWith('.mp4') || f.endsWith('.webm') || f === 'list.txt');
         temps.forEach(f => ffmpegRef.current.FS('unlink', f));
       } catch (e) {}
       
-      alert('영상 병합 중 오류가 발생했습니다. (기기 메모리가 부족하거나 영상이 너무 길 수 있습니다)');
+      alert(`영상 병합 오류: ${error.message || '알 수 없는 오류'}\n(기기 메모리 부족 또는 파일 형식을 확인해주세요)`);
     } finally {
       setTimeout(() => { setIsExtracting(false); setProgress(0); }, 500);
     }
