@@ -266,10 +266,22 @@ function TimelineMovie() {
       args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', 'output.mp4');
 
       await ffmpeg.run(...args);
+      
+      // 메모리 확보를 위해 가상 파일 시스템에서 입력 파일 즉시 삭제
+      for (let i = 0; i < videos.length; i++) {
+        try {
+          ffmpeg.FS('unlink', `v_${i}.mp4`);
+          if (videos[i].audioBlob) {
+            const ext = videos[i].audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
+            ffmpeg.FS('unlink', `a_${i}.${ext}`);
+          }
+        } catch (e) {}
+      }
+
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
       const outUrl = URL.createObjectURL(outBlob);
-
+      
       const storagePath = `${user.id}/movie_${Date.now()}.mp4`;
       await supabase.storage.from('dearest_media').upload(`movies/${storagePath}`, outBlob);
       const { data: { publicUrl } } = supabase.storage.from('dearest_media').getPublicUrl(`movies/${storagePath}`);
@@ -278,7 +290,7 @@ function TimelineMovie() {
       setProgress(100);
 
       const shareFileName = `${movieTitle || 'baby_movie'}.mp4`;
-      const file = new File([data.buffer], shareFileName, { type: 'video/mp4' });
+      const file = new File([outBlob], shareFileName, { type: 'video/mp4' });
 
       // 모바일 공유하기 지원 여부 확인
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -289,22 +301,23 @@ function TimelineMovie() {
             text: 'Dearest에서 제작한 우리 아이 성장 영상입니다.',
           });
         } catch (shareError) {
-          console.log('Share cancelled or failed, falling back to download');
           const a = document.createElement('a');
           a.href = outUrl; a.download = shareFileName;
           a.click();
         }
       } else {
-        // 공유 미지원 환경 (PC 등)
         const a = document.createElement('a');
         a.href = outUrl; a.download = shareFileName;
         a.click();
       }
-
+      
+      // 결과 파일도 삭제하여 메모리 반환
+      try { ffmpeg.FS('unlink', 'output.mp4'); } catch(e) {}
+      
       alert('영상이 제작되었습니다!');
     } catch (error) {
       console.error('Merge failed:', error);
-      alert('영상 병합 중 오류가 발생했습니다.');
+      alert('영상 병합 중 오류가 발생했습니다. (영상이 너무 길거나 고화질인 경우 메모리 부족으로 중단될 수 있습니다)');
     } finally {
       setTimeout(() => { setIsExtracting(false); setProgress(0); }, 500);
     }
@@ -326,7 +339,7 @@ function TimelineMovie() {
           <div className="processing-content">
             <Loader2 className="spinner" size={48} />
             <h2>영상을 불러오는 중입니다...</h2>
-            <p>영상 길이에 따라 시간이 소요될 수 있습니다. <br />잠시만 기다려 주세요.</p>
+            <p>영상 개수가 많거나 길면 시간이 소요될 수 있습니다. <br />잠시만 기다려 주세요.</p>
           </div>
         </div>
       )}
@@ -378,7 +391,19 @@ function TimelineMovie() {
             <div key={video.id} className="video-item" ref={el => itemsRef.current[index] = el}>
               <div className="video-index">{index + 1}</div>
               <div className="video-preview-box">
-                <video src={video.preview} className="video-thumb" playsInline muted autoPlay loop />
+                <video 
+                  src={video.preview} 
+                  className="video-thumb" 
+                  playsInline 
+                  muted 
+                  preload="metadata"
+                  onMouseOver={(e) => e.target.play()} 
+                  onMouseOut={(e) => { e.target.pause(); e.target.currentTime = 0; }} 
+                  onClick={(e) => {
+                    if (e.target.paused) e.target.play();
+                    else { e.target.pause(); e.target.currentTime = 0; }
+                  }}
+                />
                 <div className="duration-tag">{video.duration.toFixed(1)}s</div>
                 <div className="video-move-controls">
                   <div role="button" className={`icon-btn ${index === 0 ? 'disabled' : ''}`} style={{ pointerEvents: index === 0 ? 'none' : 'auto' }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveVideo(index, -1); }}><ChevronUp size={14} /></div>
