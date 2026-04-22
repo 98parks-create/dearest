@@ -215,25 +215,32 @@ function TimelineMovie() {
     }
     setIsExtracting(true);
     setProgress(0);
-    setStatus('엔진 초기화 중...');
+    setStatus('엔진 라이브러리 로드 중...');
+    
     try {
+      // 1. FFmpeg 스크립트 강제 로드 (캐시 무시)
       if (!window.FFmpeg) {
-        throw new Error('엔진 라이브러리가 로드되지 않았습니다. 새로고침 후 다시 시도해주세요.');
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js?v=${Date.now()}`;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('엔진 파일 로드 실패. 인터넷 연결을 확인해주세요.'));
+          document.head.appendChild(script);
+        });
       }
 
       const { createFFmpeg } = window.FFmpeg;
       if (!ffmpegRef.current) {
-        setStatus('엔진 설정 구성 중...');
+        setStatus('엔진 초기화 중...');
         ffmpegRef.current = createFFmpeg({
           log: true,
-          // 더 안정적인 jsDelivr CDN으로 변경
-          corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+          corePath: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js?v=${Date.now()}`
         });
       }
       const ffmpeg = ffmpegRef.current;
 
       if (!ffmpeg.isLoaded()) {
-        setStatus('엔진 데이터 다운로드 중...');
+        setStatus('엔진 데이터 로딩 중 (잠시만 기다려주세요)...');
         await ffmpeg.load();
       }
 
