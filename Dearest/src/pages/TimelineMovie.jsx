@@ -252,7 +252,7 @@ function TimelineMovie() {
         await ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
       } catch (e) { console.warn("Font load failed:", e); }
 
-      // 1. 개별 영상 순차 처리 (메모리 점유 최소화)
+      // 1. 개별 영상 순차 처리 및 실시간 롤링 병합 (메모리 점유 극소화)
       for (let i = 0; i < videos.length; i++) {
         currentIdx = i;
         const video = videos[i];
@@ -261,58 +261,57 @@ function TimelineMovie() {
         
         await ffmpeg.FS('writeFile', `in_${i}.mp4`, await fetchFile(video.file));
         
-        // 비디오/오디오 시간축 초기화 및 오디오 리샘플링 강제 적용
         let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
-        
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         if (video.audioBlob) {
           await ffmpeg.FS('writeFile', `au_${i}.webm`, await fetchFile(video.audioBlob));
           segmentArgs.push('-i', `au_${i}.webm`);
-          // 녹음된 오디오를 표준 규격으로 리샘플링
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         } else {
-          // 무음 트랙도 표준 규격으로 생성
           segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
+        // 현재 조각 가공 (segment.ts)
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
           '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-          '-g', '30', // 고정 GOP
-          '-r', '30', 
-          '-fps_mode', 'cfr', // 고정 프레임 레이트 강제 (Stuttering 방지)
+          '-g', '30', '-r', '30', '-fps_mode', 'cfr',
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', 
-          '-pix_fmt', 'yuv420p',
-          '-video_track_timescale', '30000', // 타임스케일 고정 (재생 멈춤 방지)
-          `temp_${i}.ts`
+          '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
+          'segment.ts'
         );
 
-        // 처리 완료된 원본 소스 즉시 삭제하여 메모리 확보
+        // 가공 원본 즉시 삭제
         ffmpeg.FS('unlink', `in_${i}.mp4`);
         if (video.audioBlob) ffmpeg.FS('unlink', `au_${i}.webm`);
-        
-        // 개별 진행률 업데이트는 setProgress 내부에서 처리됨
+
+        // 롤링 병합: 기존 결과(main.ts)가 있으면 합치고, 없으면 segment.ts를 main.ts로
+        const files = ffmpeg.FS('readdir', '/');
+        if (files.includes('main.ts')) {
+          ffmpeg.FS('writeFile', 'list.txt', "file 'main.ts'\nfile 'segment.ts'");
+          await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'combined.ts');
+          
+          // JS 메모리를 쓰지 않고 엔진 내부에서 파일 교체
+          ffmpeg.FS('unlink', 'main.ts');
+          ffmpeg.FS('unlink', 'segment.ts');
+          ffmpeg.FS('unlink', 'list.txt');
+          await ffmpeg.run('-i', 'combined.ts', '-c', 'copy', 'main.ts');
+          ffmpeg.FS('unlink', 'combined.ts');
+        } else {
+          // 첫 조각은 바로 main.ts로 변환
+          await ffmpeg.run('-i', 'segment.ts', '-c', 'copy', 'main.ts');
+          ffmpeg.FS('unlink', 'segment.ts');
+        }
       }
 
-      currentIdx = videos.length; // 마지막 병합 단계 인덱스
-      // 2. 가공된 TS 파일들을 하나로 결합 (매우 가벼운 작업)
-      const listContent = videos.map((_, i) => `file 'temp_${i}.ts'`).join('\n');
-      ffmpeg.FS('writeFile', 'list.txt', listContent);
-      
-      await ffmpeg.run(
-        '-f', 'concat', '-safe', '0', '-i', 'list.txt',
-        '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
-      );
-
-      // 3. 임시 파일 정리
-      for (let i = 0; i < videos.length; i++) {
-        try { ffmpeg.FS('unlink', `temp_${i}.ts`); } catch(e) {}
-      }
-      ffmpeg.FS('unlink', 'list.txt');
+      currentIdx = videos.length; 
+      // 최종 변환: main.ts -> output.mp4
+      await ffmpeg.run('-i', 'main.ts', '-c', 'copy', '-movflags', '+faststart', 'output.mp4');
+      ffmpeg.FS('unlink', 'main.ts');
 
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
