@@ -2,11 +2,28 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import {
-  Plus, Play, Save, Loader2, Check, AlertCircle,
-  Trash2, ArrowUp, ArrowDown, Mic, Square, Volume2,
-  ChevronUp, ChevronDown, Film, X, Download
+import { 
+  Plus, 
+  X, 
+  Loader2, 
+  ChevronUp, 
+  ChevronDown, 
+  Mic, 
+  Square, 
+  Play, 
+  Trash2, 
+  Save, 
+  Share2,
+  Film,
+  ArrowUp,
+  ArrowDown,
+  Volume2,
+  Check,
+  AlertCircle,
+  Download
 } from 'lucide-react';
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile, toBlobURL } from '@ffmpeg/util';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../supabaseClient';
 import './TimelineMovie.css';
@@ -216,15 +233,8 @@ function TimelineMovie() {
     setIsExtracting(true);
     setProgress(0);
     setStatus('엔진 초기화 중...');
-    
+
     try {
-      const { FFmpeg } = window.FFmpeg || {};
-      const { fetchFile, toBlobURL } = window.FFmpegUtil || {};
-
-      if (!FFmpeg) {
-        throw new Error('FFmpeg 라이브러리가 로드되지 않았습니다.');
-      }
-
       if (!ffmpegRef.current) {
         ffmpegRef.current = new FFmpeg();
       }
@@ -337,8 +347,8 @@ function TimelineMovie() {
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: `${progress}%` }}></div>
             </div>
-            <p style={{ fontWeight: 'bold', fontSize: '1.2rem', margin: '10px 0' }}>{progress}% 완료</p>
-            <h2 style={{ marginBottom: '0.5rem' }}>영상을 제작하고 있습니다</h2>
+            <p style={{ fontWeight: 'bold', fontSize: '1.2rem', margin: '15px 0' }}>{progress}% 완료</p>
+            <h2 style={{ fontSize: '1.4rem', color: 'var(--color-primary-peach)', marginBottom: '0.8rem' }}>영상을 제작하고 있습니다</h2>
             <p className="status-text" style={{ fontSize: '0.9rem', color: '#666' }}>{status}</p>
           </div>
         </div>
