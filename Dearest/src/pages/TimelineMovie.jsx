@@ -2,17 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { 
-  Plus, 
-  X, 
-  Loader2, 
-  ChevronUp, 
-  ChevronDown, 
-  Mic, 
-  Square, 
-  Play, 
-  Trash2, 
-  Save, 
+import {
+  Plus,
+  X,
+  Loader2,
+  ChevronUp,
+  ChevronDown,
+  Mic,
+  Square,
+  Play,
+  Trash2,
+  Save,
   Share2,
   Film,
   ArrowUp,
@@ -69,7 +69,7 @@ function TimelineMovie() {
       allVideos.forEach(v => v.pause());
     } else {
       allVideos.forEach(v => {
-        try { v.play().catch(() => {}); } catch(e) {}
+        try { v.play().catch(() => { }); } catch (e) { }
       });
     }
   }, [recordingVideoId]);
@@ -268,25 +268,26 @@ function TimelineMovie() {
         const video = videos[i];
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
-        
+
         setStatus(`${i + 1}번째 영상 가공 중...`);
         await ffmpeg.writeFile('in.mp4', await fetchFile(video.file));
-        
-        let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS,fps=30${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
-        const args = ['-i', 'in.mp4' ];
-        
+
+        let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS,fps=30${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=15` : ''}[v];`;
+        const args = ['-i', 'in.mp4'];
+
         if (video.audioBlob) {
           await ffmpeg.writeFile('au.webm', await fetchFile(video.audioBlob));
           args.push('-i', 'au.webm');
-          filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
+          // Mix original audio [0:a] and recorded audio [1:a]
+          filter += `[0:a]aresample=44100[oa];[1:a]aresample=44100,volume=1.5[ra];[oa][ra]amix=inputs=2:duration=longest[a]`;
         } else {
-          args.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
-          filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
+          // Just use original audio [0:a]
+          filter += `[0:a]aresample=44100[a]`;
         }
 
         await ffmpeg.exec([...args, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32', '-r', '30', '-vsync', 'cfr', '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-pix_fmt', 'yuv420p', 'seg.ts']);
         await ffmpeg.deleteFile('in.mp4');
-        try { await ffmpeg.deleteFile('au.webm'); } catch(e) {}
+        try { await ffmpeg.deleteFile('au.webm'); } catch (e) { }
 
         const files = await ffmpeg.listDir('/');
         if (files.some(f => f.name === 'main.ts')) {
@@ -300,7 +301,7 @@ function TimelineMovie() {
         }
       }
 
-      currentIdx = videos.length; 
+      currentIdx = videos.length;
       setStatus('최종 파일 생성 중...');
       await ffmpeg.exec(['-i', 'main.ts', '-c', 'copy', '-movflags', '+faststart', 'output.mp4']);
       await ffmpeg.deleteFile('main.ts');
@@ -308,7 +309,7 @@ function TimelineMovie() {
       const data = await ffmpeg.readFile('output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
       const storagePath = `${user.id}/movie_${Date.now()}.mp4`;
-      
+
       setStatus('서버에 저장 중...');
       const { error: uploadError } = await supabase.storage.from('dearest_media').upload(`movies/${storagePath}`, outBlob);
       if (uploadError) throw uploadError;
@@ -381,7 +382,7 @@ function TimelineMovie() {
         </label>
 
         <div className="upload-warning-text" style={{ textAlign: 'center', fontSize: '0.85rem', color: '#888', marginTop: '1rem', padding: '0 1rem' }}>
-          ⚠️ 여러 영상을 한꺼번에 업로드 시 영상 길이에 따라 소요시간이 걸릴 수 있습니다.<br/>
+          ⚠️ 여러 영상을 한꺼번에 업로드 시 영상 길이에 따라 소요시간이 걸릴 수 있습니다.<br />
           💡 1분 이상의 긴 영상은 안정적인 환경(PC 등)에서 제작하시는 것을 추천합니다.
         </div>
 
@@ -390,11 +391,11 @@ function TimelineMovie() {
             <div key={video.id} className="video-item" ref={el => itemsRef.current[index] = el}>
               <div className="video-index">{index + 1}</div>
               <div className="video-preview-box">
-                <video 
-                  src={video.preview} 
-                  className="video-thumb" 
-                  playsInline 
-                  muted 
+                <video
+                  src={video.preview}
+                  className="video-thumb"
+                  playsInline
+                  muted
                   autoPlay
                   loop
                   preload="auto"
