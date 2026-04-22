@@ -258,6 +258,13 @@ function TimelineMovie() {
         }
       } catch (e) { console.warn("Font preparation failed:", e); }
 
+      // 엔진 로그 캡처 준비
+      let lastLogs = [];
+      ffmpeg.setLogger(({ message }) => {
+        lastLogs.push(message);
+        if (lastLogs.length > 5) lastLogs.shift();
+      });
+
       // 1. 개별 영상 순차 처리 (Direct Buffer Injection)
       for (let i = 0; i < videos.length; i++) {
         currentIdx = i;
@@ -265,12 +272,12 @@ function TimelineMovie() {
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
         
-        // 메모리 복사를 최소화하는 ArrayBuffer 주입
+        // 메모리 최소화 주입
         const videoBuffer = await video.file.arrayBuffer();
         ffmpeg.FS('writeFile', `in_${i}.mp4`, new Uint8Array(videoBuffer));
         
-        // 360p 이머전시 안정화 (모바일 최종 보루)
-        let filter = `[0:v]scale=360:640:force_original_aspect_ratio=decrease,pad=360:640:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=h-100:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
+        // 240p 초정밀 생존 모드 (모바일 최후의 선택)
+        let filter = `[0:v]scale=240:426:force_original_aspect_ratio=decrease,pad=240:426:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=18:x=(w-text_w)/2:y=h-80:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         let audioExt = 'webm';
@@ -279,28 +286,27 @@ function TimelineMovie() {
           const audioBuffer = await video.audioBlob.arrayBuffer();
           ffmpeg.FS('writeFile', `au_${i}.${audioExt}`, new Uint8Array(audioBuffer));
           segmentArgs.push('-i', `au_${i}.${audioExt}`);
-          filter += `[1:a]aresample=24000,asetpts=PTS-STARTPTS[a]`;
+          filter += `[1:a]aresample=16000,asetpts=PTS-STARTPTS[a]`;
         } else {
-          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=24000:cl=stereo:d=${video.duration}`);
-          filter += `[1:a]aresample=24000,asetpts=PTS-STARTPTS[a]`;
+          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=16000:cl=stereo:d=${video.duration}`);
+          filter += `[1:a]aresample=16000,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 초경량 생존 인코딩 (CRF 38)
+        // 극한의 압축 (CRF 45)
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '38',
-          '-maxrate', '500k', '-bufsize', '1M',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '45',
+          '-maxrate', '300k', '-bufsize', '600k',
           '-threads', '1',
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
-          '-c:a', 'aac', '-ar', '24000', '-ac', '2', 
+          '-c:a', 'aac', '-ar', '16000', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
           '-f', 'mpegts',
           `temp_${i}.ts`
         );
 
-        // 메모리 해제 및 짧은 휴식 (브라우저 과부하 방지)
         ffmpeg.FS('unlink', `in_${i}.mp4`);
         if (video.audioBlob) {
           try { ffmpeg.FS('unlink', `au_${i}.${audioExt}`); } catch(e) {}
@@ -309,23 +315,21 @@ function TimelineMovie() {
       }
 
       currentIdx = videos.length; 
-      // 2. 고속 컨캣 디먹서(Demuxer) 병합 (목록 파일 방식)
       const listContent = videos.map((_, i) => `file 'temp_${i}.ts'`).join('\n');
       ffmpeg.FS('writeFile', 'list.txt', listContent);
       
-      // 파일 존재 여부 최종 확인
       const existingFiles = ffmpeg.FS('readdir', '/');
       const missingFiles = videos.filter((_, i) => !existingFiles.includes(`temp_${i}.ts`));
       if (missingFiles.length > 0) {
-        throw new Error(`일부 영상 조각 생성 실패: ${missingFiles.length}개 누락`);
+        throw new Error(`조각 생성 실패: ${missingFiles.map(i => i).join(',')}번 누락`);
       }
 
+      // 최종 병합 실행
       await ffmpeg.run(
         '-f', 'concat', '-safe', '0', '-i', 'list.txt',
-        '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
+        '-c', 'copy', '-y', '-movflags', '+faststart', 'output.mp4'
       );
 
-      // 3. 임시 파일 정리
       for (let i = 0; i < videos.length; i++) {
         try { ffmpeg.FS('unlink', `temp_${i}.ts`); } catch(e) {}
       }
@@ -369,13 +373,14 @@ function TimelineMovie() {
       alert('영상이 제작되었습니다!');
     } catch (error) {
       console.error('Merge failed:', error);
+      const errorLogs = lastLogs.join('\n');
+      alert(`영상 병합 오류: ${error.message}\n\n[엔진 로그]\n${errorLogs}`);
+      
       try {
         const files = ffmpegRef.current.FS('readdir', '/');
         const temps = files.filter(f => f.endsWith('.ts') || f.endsWith('.mp4') || f.endsWith('.webm') || f === 'list.txt');
         temps.forEach(f => ffmpegRef.current.FS('unlink', f));
       } catch (e) {}
-      
-      alert(`영상 병합 오류: ${error.message || '알 수 없는 오류'}\n(기기 메모리 부족 또는 파일 형식을 확인해주세요)`);
     } finally {
       setTimeout(() => { setIsExtracting(false); setProgress(0); }, 500);
     }
