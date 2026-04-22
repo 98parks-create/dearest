@@ -132,9 +132,7 @@ function TimelineMovie() {
     if (!files.length) return;
 
     setTimeout(async () => {
-      setIsExtracting(true);
-      setProgress(0);
-      setStatus('영상을 불러오는 중...');
+      setIsUploading(true);
       await new Promise(resolve => setTimeout(resolve, 200));
 
       const limitDuration = profile?.is_subscribed ? 600 : 15;
@@ -142,9 +140,7 @@ function TimelineMovie() {
         let currentVideos = [...videos];
         let currentTotalDuration = totalDuration;
 
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          setStatus(`영상 읽는 중 (${i + 1}/${files.length})...`);
+        for (const file of files) {
           const duration = await getVideoDuration(file);
           await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -163,7 +159,6 @@ function TimelineMovie() {
             audioUrl: null
           });
           currentTotalDuration += duration;
-          setProgress(Math.round(((i + 1) / files.length) * 100));
         }
 
         setVideos(currentVideos);
@@ -172,9 +167,7 @@ function TimelineMovie() {
         console.error('Upload error:', error);
         alert('영상을 불러오는 중 오류가 발생했습니다.');
       } finally {
-        setIsExtracting(false);
-        setProgress(0);
-        setStatus('');
+        setIsUploading(false);
         e.target.value = '';
       }
     }, 500);
@@ -222,89 +215,39 @@ function TimelineMovie() {
     }
     setIsExtracting(true);
     setProgress(0);
-    setStatus('엔진 준비 중...');
+    setStatus('엔진 초기화 중...');
     
     try {
-      // 라이브러리 체크
-      if (!window.FFmpeg) {
-        setStatus('엔진 라이브러리 로드 중...');
-        await new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js";
-          script.onload = resolve;
-          script.onerror = () => reject(new Error('엔진 로드 실패'));
-          document.head.appendChild(script);
-        });
-      }
-
-      const { createFFmpeg } = window.FFmpeg;
       if (!ffmpegRef.current) {
+        const { createFFmpeg } = window.FFmpeg;
         ffmpegRef.current = createFFmpeg({
           log: true,
-          corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js"
+          corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
         });
       }
       const ffmpeg = ffmpegRef.current;
+      if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
-      if (!ffmpeg.isLoaded()) {
-        setStatus('엔진 데이터 로딩 중...');
-        await ffmpeg.load();
-      }
-
-      // 0. 폰트 준비 (에러 발생 시 무시하고 진행하여 0% 멈춤 방지)
-      try {
-        const files = ffmpeg.FS('readdir', '/');
-        if (!files.includes('font.ttf')) {
-          setStatus('글꼴 데이터 준비 중...');
-          const fontResponse = await fetch('/font.ttf', { cache: 'no-cache' });
-          if (fontResponse.ok) {
-            const fontBuffer = await fontResponse.arrayBuffer();
-            ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
-          }
-        }
-      } catch (e) { 
-        console.warn("Font preparation failed, continuing without custom font:", e);
-      }
-
-      // 전체 진행률 관리
-      let currentIdx = 0;
-      
-      ffmpeg.setProgress(({ ratio }) => {
-        let safeRatio = ratio;
-        if (isNaN(safeRatio) || safeRatio < 0) safeRatio = 0;
-        if (safeRatio > 1) safeRatio = 1;
-        
-        // 전체 진행률 = (이전 완료된 영상들 비율) + (현재 영상의 진행도 비율)
-        const totalSegments = videos.length + 1; // 영상들 + 최종 병합/업로드
-        const baseProgress = (currentIdx / totalSegments) * 100;
-        const currentSegmentProgress = (safeRatio / totalSegments) * 100;
-        
-        setProgress(Math.min(Math.round(baseProgress + currentSegmentProgress), 99));
-      });
-
-      // 0. 폰트 준비 (메모리 누수 방지)
+      // 폰트 준비 (한 번만 수행)
       try {
         const files = ffmpeg.FS('readdir', '/');
         if (!files.includes('font.ttf')) {
           setStatus('글꼴 데이터 준비 중...');
           const fontResponse = await fetch('/font.ttf');
-          if (!fontResponse.ok) throw new Error('폰트 파일을 찾을 수 없습니다.');
           const fontBuffer = await fontResponse.arrayBuffer();
           ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
         }
-      } catch (e) { 
-        console.warn("Font preparation failed:", e);
-        setStatus('글꼴 없이 진행 중...');
-      }
+      } catch (e) { console.warn("Font preparation failed:", e); }
 
-      // 엔진 로그 캡처 준비
-      let lastLogs = [];
-      ffmpeg.setLogger(({ message }) => {
-        lastLogs.push(message);
-        if (lastLogs.length > 5) lastLogs.shift();
+      let currentIdx = 0;
+      ffmpeg.setProgress(({ ratio }) => {
+        const totalSegments = videos.length + 1;
+        const baseProgress = (currentIdx / totalSegments) * 100;
+        const currentSegmentProgress = (Math.max(0, Math.min(1, ratio)) / totalSegments) * 100;
+        setProgress(Math.min(Math.round(baseProgress + currentSegmentProgress), 99));
       });
 
-      // 1. 개별 영상 순차 처리 및 실시간 롤링 병합 (메모리 점유 최적화)
+      // 순차적 롤링 병합 시작
       for (let i = 0; i < videos.length; i++) {
         currentIdx = i;
         const video = videos[i];
@@ -315,23 +258,19 @@ function TimelineMovie() {
         const videoBuffer = await video.file.arrayBuffer();
         ffmpeg.FS('writeFile', 'input_src.mp4', new Uint8Array(videoBuffer));
         
-        // 480p 표준 화질 + 프레임 고정 (끊김 방지)
         let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS,fps=30${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', 'input_src.mp4' ];
         
-        let audioExt = 'webm';
         if (video.audioBlob) {
-          audioExt = video.audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
           const audioBuffer = await video.audioBlob.arrayBuffer();
-          ffmpeg.FS('writeFile', 'audio_src.' + audioExt, new Uint8Array(audioBuffer));
-          segmentArgs.push('-i', 'audio_src.' + audioExt);
+          ffmpeg.FS('writeFile', 'audio_src.webm', new Uint8Array(audioBuffer));
+          segmentArgs.push('-i', 'audio_src.webm');
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         } else {
           segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 가공 및 싱크 고정
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
@@ -343,13 +282,10 @@ function TimelineMovie() {
           'segment.ts'
         );
 
-        // 원본 즉시 삭제
         ffmpeg.FS('unlink', 'input_src.mp4');
-        try { ffmpeg.FS('unlink', 'audio_src.' + audioExt); } catch(e) {}
+        try { ffmpeg.FS('unlink', 'audio_src.webm'); } catch(e) {}
 
-        // 롤링 병합: 하나씩 이어 붙여 메모리 폭주 방지
-        const files = ffmpeg.FS('readdir', '/');
-        if (files.includes('main.ts')) {
+        if (ffmpeg.FS('readdir', '/').includes('main.ts')) {
           setStatus(`${i + 1}번째 조각 합치는 중...`);
           ffmpeg.FS('writeFile', 'list.txt', "file 'main.ts'\nfile 'segment.ts'");
           await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'combined.ts');
@@ -363,65 +299,31 @@ function TimelineMovie() {
       }
 
       currentIdx = videos.length; 
-      setStatus('최종 MP4 변환 중...');
+      setStatus('최종 영상 파일 생성 중...');
       await ffmpeg.run('-i', 'main.ts', '-c', 'copy', '-movflags', '+faststart', 'output.mp4');
       ffmpeg.FS('unlink', 'main.ts');
 
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
-      const outUrl = URL.createObjectURL(outBlob);
-      
       const storagePath = `${user.id}/movie_${Date.now()}.mp4`;
-      setStatus('서버로 저장 중 (잠시만 기다려주세요)...');
+      
+      setStatus('서버에 저장 중...');
       const { error: uploadError } = await supabase.storage.from('dearest_media').upload(`movies/${storagePath}`, outBlob);
-      if (uploadError) throw new Error(`서버 저장 실패: ${uploadError.message} (용량이 부족할 수 있습니다)`);
+      if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage.from('dearest_media').getPublicUrl(`movies/${storagePath}`);
-      const { error: dbError } = await supabase.from('movies').insert({ user_id: user.id, video_url: publicUrl, title: movieTitle || '성장 기록 영상' });
-      if (dbError) throw new Error(`DB 기록 실패: ${dbError.message}`);
+      await supabase.from('movies').insert({ user_id: user.id, video_url: publicUrl, title: movieTitle || '성장 기록 영상' });
 
       setProgress(100);
-
-      const shareFileName = `${movieTitle || 'baby_movie'}.mp4`;
-      const file = new File([outBlob], shareFileName, { type: 'video/mp4' });
-
-      // 공유 창 호출
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: movieTitle || '성장 기록 영상',
-            text: `우리아이 성장 영상 확인하기: ${window.location.origin}`,
-          });
-        } catch (shareError) {
-          if (shareError.name !== 'AbortError') {
-            const a = document.createElement('a');
-            a.href = outUrl; a.download = shareFileName;
-            a.click();
-          }
-        }
-      } else {
-        const a = document.createElement('a');
-        a.href = outUrl; a.download = shareFileName;
-        a.click();
-      }
-      
-      try { ffmpeg.FS('unlink', 'output.mp4'); } catch(e) {}
-      
       alert('성장 영상이 제작되어 마이페이지에 저장되었습니다!');
-      window.location.href = '/mypage'; // 마이페이지로 자동 이동
+      window.location.href = '/mypage';
     } catch (error) {
       console.error('Merge failed:', error);
-      const errorLogs = lastLogs.join('\n');
-      alert(`영상 병합 오류: ${error.message}\n\n[엔진 로그]\n${errorLogs}`);
-      
-      try {
-        const files = ffmpegRef.current.FS('readdir', '/');
-        const temps = files.filter(f => f.endsWith('.ts') || f.endsWith('.mp4') || f.endsWith('.webm') || f === 'list.txt');
-        temps.forEach(f => ffmpegRef.current.FS('unlink', f));
-      } catch (e) {}
+      alert(`제작 실패: ${error.message}`);
     } finally {
-      setTimeout(() => { setIsExtracting(false); setProgress(0); }, 500);
+      setIsExtracting(false);
+      setProgress(0);
+      setStatus('');
     }
   };
 
@@ -436,19 +338,26 @@ function TimelineMovie() {
         onChange={handleVideoUpload}
       />
 
+      {isUploading && (
+        <div className="processing-overlay">
+          <div className="processing-content">
+            <Loader2 className="spinner" size={48} />
+            <h2>영상을 불러오는 중입니다...</h2>
+            <p>잠시만 기다려 주세요.</p>
+          </div>
+        </div>
+      )}
+
       {isExtracting && (
         <div className="processing-overlay">
-          <div className="processing-content glass-panel">
-            <Loader2 className="spinner" size={56} color="var(--color-primary-peach)" />
-            <h2 style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>영상을 처리하고 있습니다</h2>
-            <div className="progress-bar" style={{ width: '100%', maxWidth: '300px', height: '10px', background: '#eee', borderRadius: '5px', overflow: 'hidden', margin: '0 auto' }}>
-              <div className="progress-fill" style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, var(--color-primary-peach), #ff9a9e)', transition: 'width 0.3s ease' }}></div>
+          <div className="processing-content">
+            <Loader2 className="spinner" size={48} />
+            <h2>영상을 제작하고 있습니다</h2>
+            <div className="progress-bar">
+              <div className="progress-fill" style={{ width: `${progress}%` }}></div>
             </div>
-            <div style={{ marginTop: '1rem' }}>
-              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary-peach)' }}>{progress}%</span>
-              <p className="status-text" style={{ fontSize: '1rem', color: '#555', marginTop: '0.5rem', fontWeight: '500' }}>{status}</p>
-            </div>
-            <p style={{ fontSize: '0.85rem', color: '#999', marginTop: '1.5rem' }}>페이지를 나가지 마세요. <br />영상이 길면 최대 몇 분 정도 소요될 수 있습니다.</p>
+            <p>{progress}% 완료</p>
+            <p className="status-text" style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>{status}</p>
           </div>
         </div>
       )}
