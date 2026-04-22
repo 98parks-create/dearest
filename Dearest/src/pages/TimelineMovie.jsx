@@ -246,32 +246,37 @@ function TimelineMovie() {
         setProgress(Math.min(Math.round(baseProgress + currentSegmentProgress), 99));
       });
 
+      // 0. 엔진 사전 준비 및 폰트 고정 (메모리 누수 방지)
+      if (!ffmpeg.isLoaded()) await ffmpeg.load();
+      
       try {
-        const fontResponse = await fetch('/font.ttf');
-        const fontBuffer = await fontResponse.arrayBuffer();
-        await ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
-      } catch (e) { console.warn("Font load failed:", e); }
+        const files = ffmpeg.FS('readdir', '/');
+        if (!files.includes('font.ttf')) {
+          const fontResponse = await fetch('/font.ttf');
+          const fontBuffer = await fontResponse.arrayBuffer();
+          ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
+        }
+      } catch (e) { console.warn("Font preparation failed:", e); }
 
-      // 1. 개별 영상 순차 처리 (고압축 TS 가공)
+      // 1. 개별 영상 순차 처리 (Direct Buffer Injection)
       for (let i = 0; i < videos.length; i++) {
         currentIdx = i;
         const video = videos[i];
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
         
-        await ffmpeg.FS('writeFile', `in_${i}.mp4`, await fetchFile(video.file));
+        // 메모리 복사를 최소화하는 ArrayBuffer 주입
+        const videoBuffer = await video.file.arrayBuffer();
+        ffmpeg.FS('writeFile', `in_${i}.mp4`, new Uint8Array(videoBuffer));
         
-        // 480p 초경량 가공 (메모리 부족 방지 최후의 보루)
         let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
         let audioExt = 'webm';
         if (video.audioBlob) {
           audioExt = video.audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
-        }
-        
-        if (video.audioBlob) {
-          await ffmpeg.FS('writeFile', `au_${i}.${audioExt}`, await fetchFile(video.audioBlob));
+          const audioBuffer = await video.audioBlob.arrayBuffer();
+          ffmpeg.FS('writeFile', `au_${i}.${audioExt}`, new Uint8Array(audioBuffer));
           segmentArgs.push('-i', `au_${i}.${audioExt}`);
           filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
         } else {
@@ -279,13 +284,14 @@ function TimelineMovie() {
           filter += `[1:a]aresample=32000,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 초경량 설정 (CRF 35, 1Mbps)
+        // 초경량 인코딩 (모바일 RAM 생존 모드)
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
           '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '35',
-          '-maxrate', '1M', '-bufsize', '2M',
+          '-maxrate', '800k', '-bufsize', '1.5M', // 비트레이트 더욱 강화된 캡
+          '-threads', '1', // 단일 스레드로 안정성 확보
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
           '-c:a', 'aac', '-ar', '32000', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
@@ -293,7 +299,7 @@ function TimelineMovie() {
           `temp_${i}.ts`
         );
 
-        // 가공 원본 즉시 삭제 (메모리 즉각 반환)
+        // 즉각적인 메모리 해제
         ffmpeg.FS('unlink', `in_${i}.mp4`);
         if (video.audioBlob) {
           try { ffmpeg.FS('unlink', `au_${i}.${audioExt}`); } catch(e) {}
@@ -308,7 +314,7 @@ function TimelineMovie() {
         '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
       );
 
-      // 3. 임시 TS 파일들 일괄 삭제
+      // 3. 임시 파일 정리
       for (let i = 0; i < videos.length; i++) {
         try { ffmpeg.FS('unlink', `temp_${i}.ts`); } catch(e) {}
       }
