@@ -1,0 +1,360 @@
+.sub-wrapper {
+  min-height: calc(100vh - 100px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem 1rem;
+  background: var(--color-background);
+}
+
+.sub-container, .payment-method-container, .success-container, .processing-container, .payment-section {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sub-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.premium-badge {
+  display: inline-block;
+  background: var(--color-primary-peach);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 1rem;
+}
+
+.sub-header h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.8rem;
+  color: var(--color-text-dark);
+}
+
+.sub-header p {
+  color: var(--color-text-light);
+  line-height: 1.5;
+}
+
+.plan-card {
+  width: 100%;
+  padding: 2.5rem;
+  border: 2px solid var(--color-primary-peach);
+  position: relative;
+  overflow: hidden;
+}
+
+.plan-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--color-primary-peach);
+  margin-bottom: 1rem;
+}
+
+.plan-price {
+  margin-bottom: 2rem;
+}
+
+.plan-price .amount {
+  font-size: 2.8rem;
+  font-weight: 900;
+  color: var(--color-text-dark);
+}
+
+.plan-price .period {
+  color: var(--color-text-light);
+  font-size: 1.1rem;
+}
+
+.plan-benefits {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.plan-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--color-text-dark);
+}
+
+.plan-benefits li svg {
+  color: var(--color-primary-peach);
+}
+
+.sub-btn-main {
+  width: 100%;
+  padding: 18px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 16px;
+  box-shadow: 0 10px 20px rgba(255, 179, 142, 0.3);
+}
+
+/* Payment Methods */
+.method-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.method-item {
+  width: 100%;
+  padding: 1.2rem;
+  background: white;
+  border: 2px solid var(--color-secondary-beige);
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.method-item.active {
+  border-color: var(--color-primary-peach);
+  background: rgba(255, 179, 142, 0.05);
+}
+
+.method-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.method-info .name {
+  font-weight: 700;
+  color: var(--color-text-dark);
+}
+
+.method-info .desc {
+  font-size: 0.8rem;
+  color: var(--color-text-light);
+}
+
+.radio-circle {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-secondary-beige);
+  border-radius: 50%;
+  position: relative;
+}
+
+.method-item.active .radio-circle {
+  border-color: var(--color-primary-peach);
+}
+
+.method-item.active .radio-circle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  background: var(--color-primary-peach);
+  border-radius: 50%;
+}
+
+.order-summary {
+  width: 100%;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--color-text-light);
+}
+
+.summary-row.total {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-secondary-beige);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--color-text-dark);
+}
+
+.payment-actions {
+  width: 100%;
+  display: flex;
+  gap: 1rem;
+}
+
+.payment-actions button {
+  flex: 1;
+  padding: 14px;
+}
+
+/* Success & Processing */
+.success-icon-wrapper {
+  background: #4ade80;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2rem;
+  box-shadow: 0 10px 25px rgba(74, 222, 128, 0.3);
+}
+
+.spinner-large {
+  animation: spin 1s linear infinite;
+  color: var(--color-primary-peach);
+  margin-bottom: 2rem;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.security-notice {
+  margin-top: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--color-text-light);
+}
+/* 무통장 입금 전용 스타일 */
+.payment-card {
+  width: 100%;
+  padding: 3rem !important;
+  text-align: left;
+}
+
+.payment-card h2 {
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  color: var(--color-text-dark);
+}
+
+.payment-desc {
+  color: #888;
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
+}
+
+.bank-info-box {
+  background: #fdfaf8;
+  border: 1px solid #f0e6e0;
+  border-radius: 20px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.bank-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px dashed #eee;
+}
+
+.bank-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.bank-row .label {
+  color: #a0a0a0;
+  font-size: 0.9rem;
+}
+
+.bank-row .value {
+  color: #444;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.bank-row .value.highlight {
+  color: var(--color-primary-peach);
+  font-size: 1.4rem;
+}
+
+.payment-guide {
+  background: rgba(0,0,0,0.02);
+  padding: 1.5rem;
+  border-radius: 16px;
+  margin-bottom: 2.5rem;
+}
+
+.payment-guide p {
+  font-weight: 700;
+  margin-bottom: 0.8rem;
+}
+
+.payment-guide ul {
+  list-style: none;
+  padding: 0;
+}
+
+.payment-guide li {
+  font-size: 0.9rem;
+  color: #777;
+  margin-bottom: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.payment-guide li::before {
+  content: "📍";
+  font-size: 0.8rem;
+}
+
+.full-width {
+  width: 100%;
+  padding: 1rem !important;
+  font-size: 1.1rem !important;
+  border-radius: 14px !important;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  background: #fff4f0;
+  color: var(--color-primary-peach);
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin: 1.5rem 0;
+}
