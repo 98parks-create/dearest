@@ -1,0 +1,21 @@
+{
+  "short_name": "Dearest",
+  "name": "Dearest - 우리 아이 성장 무비",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#FFB38E",
+  "background_color": "#ffffff"
+}

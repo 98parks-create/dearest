@@ -1,14 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { BookOpen, Lock, Film, Mic, Heart, Clock } from 'lucide-react';
+import { BookOpen, Lock, Film, Heart, Clock, Download } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import PWAInstallGuide from '../components/PWAInstallGuide';
 import './Home.css';
 
 gsap.registerPlugin(ScrollTrigger);
 
 function Home() {
+  const [isPwaModalOpen, setIsPwaModalOpen] = useState(false);
   const heroRef = useRef(null);
   const featureSectionRef = useRef(null);
   const cardsRef = useRef([]);
@@ -79,8 +81,15 @@ function Home() {
       <section className="hero-section" ref={heroRef}>
         <h1>소중한 아이의 순간을, <br/>영원한 기억으로</h1>
         <p>Dearest는 부모님의 목소리와 함께 아이의 성장을 기록하는 특별한 공간입니다.</p>
-        <button onClick={handleStart} className="btn btn-primary start-btn">지금 시작하기</button>
+        <div className="hero-btns">
+          <button onClick={handleStart} className="btn btn-primary start-btn">지금 시작하기</button>
+          <button onClick={() => setIsPwaModalOpen(true)} className="btn btn-outline pwa-btn">
+            <Download size={18} /> 앱 설치 가이드
+          </button>
+        </div>
       </section>
+
+      <PWAInstallGuide isOpen={isPwaModalOpen} onClose={() => setIsPwaModalOpen(false)} />
 
       {/* Why Dearest Section */}
       <section className="info-section">
