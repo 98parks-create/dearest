@@ -20,7 +20,7 @@
       "destination": "https://js.tosspayments.com/:path*"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|.*\\.).*)",
       "destination": "/index.html"
     }
   ]

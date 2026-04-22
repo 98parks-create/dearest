@@ -109,35 +109,43 @@ function TimelineMovie() {
   const handleVideoUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+    
+    // UI 우선 반영을 위해 업로드 상태 먼저 활성화
     setIsUploading(true);
-    const limitCount = profile?.is_subscribed ? 30 : 5;
-    const limitDuration = profile?.is_subscribed ? 600 : 15;
-
-    try {
-      const newVideos = [...videos];
-      let newTotalDuration = totalDuration;
-      for (const file of files) {
-        const duration = await getVideoDuration(file);
-        if (newTotalDuration + duration > limitDuration) {
-          alert(`제한 시간(${limitDuration}초)을 초과한 영상은 제외되었습니다.`);
-          continue;
+    
+    // 브라우저가 로딩 화면을 먼저 그릴 수 있도록 약간의 지연 후 처리 시작
+    setTimeout(async () => {
+      const limitDuration = profile?.is_subscribed ? 600 : 15;
+  
+      try {
+        const newVideos = [...videos];
+        let newTotalDuration = totalDuration;
+        
+        for (const file of files) {
+          const duration = await getVideoDuration(file);
+          if (newTotalDuration + duration > limitDuration) {
+            alert(`제한 시간(${limitDuration}초)을 초과한 영상은 제외되었습니다.`);
+            continue;
+          }
+          newVideos.push({
+            id: Math.random().toString(36).substr(2, 9),
+            file,
+            preview: URL.createObjectURL(file),
+            duration,
+            comment: ''
+          });
+          newTotalDuration += duration;
         }
-        newVideos.push({
-          id: Math.random().toString(36).substr(2, 9),
-          file,
-          preview: URL.createObjectURL(file),
-          duration,
-          comment: ''
-        });
-        newTotalDuration += duration;
+        
+        setVideos(newVideos);
+        setTotalDuration(newTotalDuration);
+      } catch (error) {
+        console.error('Upload error:', error);
+        alert('영상을 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setIsUploading(false);
       }
-      setVideos(newVideos);
-      setTotalDuration(newTotalDuration);
-    } catch (error) {
-      console.error('Upload error:', error);
-    } finally {
-      setIsUploading(false);
-    }
+    }, 100);
   };
 
   const getVideoDuration = (file) => {
