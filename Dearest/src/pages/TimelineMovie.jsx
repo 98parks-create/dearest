@@ -36,6 +36,7 @@ function TimelineMovie() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState('');
   const [videos, setVideos] = useState([]);
   const [recordingVideoId, setRecordingVideoId] = useState(null);
   const [movieTitle, setMovieTitle] = useState('');
