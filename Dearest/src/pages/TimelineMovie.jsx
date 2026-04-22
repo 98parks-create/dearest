@@ -276,10 +276,32 @@ function TimelineMovie() {
       await supabase.from('movies').insert({ user_id: user.id, video_url: publicUrl, title: movieTitle || '성장 기록 영상' });
 
       setProgress(100);
-      const a = document.createElement('a');
-      a.href = outUrl; a.download = `${movieTitle || 'baby_movie'}.mp4`;
-      a.click();
-      alert('영상이 성공적으로 저장되었습니다!');
+      
+      const fileName = `${movieTitle || 'baby_movie'}.mp4`;
+      const file = new File([data.buffer], fileName, { type: 'video/mp4' });
+
+      // 모바일 공유하기 지원 여부 확인
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: movieTitle || '성장 기록 영상',
+            text: '데어리스트에서 제작한 우리 아이 성장 영상입니다.',
+          });
+        } catch (shareError) {
+          console.log('Share cancelled or failed, falling back to download');
+          const a = document.createElement('a');
+          a.href = outUrl; a.download = fileName;
+          a.click();
+        }
+      } else {
+        // 공유 미지원 환경 (PC 등)
+        const a = document.createElement('a');
+        a.href = outUrl; a.download = fileName;
+        a.click();
+      }
+      
+      alert('영상이 제작되었습니다!');
     } catch (error) {
       console.error('Merge failed:', error);
       alert('영상 병합 중 오류가 발생했습니다.');
