@@ -89,50 +89,50 @@ function TimelineMovie() {
     }));
   };
 
-  const handleVideoUpload = async (e) => {
+  const handleVideoUpload = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     
-    setIsUploading(true);
-    
-    // UI 반영을 위해 확실한 틈을 줌 (200ms)
-    await new Promise(resolve => setTimeout(resolve, 200));
+    setTimeout(async () => {
+      setIsUploading(true);
+      await new Promise(resolve => setTimeout(resolve, 200));
 
-    const limitDuration = profile?.is_subscribed ? 600 : 15;
-    try {
-      let currentVideos = [...videos];
-      let currentTotalDuration = totalDuration;
+      const limitDuration = profile?.is_subscribed ? 600 : 15;
+      try {
+        let currentVideos = [...videos];
+        let currentTotalDuration = totalDuration;
 
-      for (const file of files) {
-        // 각 파일 처리 사이에 틈을 주어 UI가 멈추지 않게 함
-        const duration = await getVideoDuration(file);
-        await new Promise(resolve => setTimeout(resolve, 10));
+        for (const file of files) {
+          const duration = await getVideoDuration(file);
+          await new Promise(resolve => setTimeout(resolve, 50));
 
-        if (currentTotalDuration + duration > limitDuration) {
-          alert(`제한 시간(${limitDuration}초)을 초과한 영상(${file.name})은 제외되었습니다.`);
-          continue;
+          if (currentTotalDuration + duration > limitDuration) {
+            alert(`제한 시간(${limitDuration}초)을 초과한 영상(${file.name})은 제외되었습니다.`);
+            continue;
+          }
+
+          currentVideos.push({
+            id: Math.random().toString(36).substr(2, 9),
+            file,
+            preview: URL.createObjectURL(file),
+            duration,
+            comment: '',
+            audioBlob: null,
+            audioUrl: null
+          });
+          currentTotalDuration += duration;
         }
-
-        currentVideos.push({
-          id: Math.random().toString(36).substr(2, 9),
-          file,
-          preview: URL.createObjectURL(file),
-          duration,
-          comment: '',
-          audioBlob: null,
-          audioUrl: null
-        });
-        currentTotalDuration += duration;
+        
+        setVideos(currentVideos);
+        setTotalDuration(currentTotalDuration);
+      } catch (error) {
+        console.error('Upload error:', error);
+        alert('영상을 불러오는 중 오류가 발생했습니다.');
+      } finally {
+        setIsUploading(false);
+        e.target.value = '';
       }
-      
-      setVideos(currentVideos);
-      setTotalDuration(currentTotalDuration);
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('영상을 불러오는 중 오류가 발생했습니다.');
-    } finally {
-      setIsUploading(false);
-    }
+    }, 500);
   };
 
   const getVideoDuration = (file) => {
@@ -143,6 +143,7 @@ function TimelineMovie() {
         URL.revokeObjectURL(video.src);
         resolve(video.duration);
       };
+      video.onerror = () => resolve(0);
       video.src = URL.createObjectURL(file);
     });
   };
@@ -152,7 +153,8 @@ function TimelineMovie() {
     if (videoToRemove) {
       setTotalDuration(prev => prev - videoToRemove.duration);
       setVideos(prev => prev.filter(v => v.id !== id));
-      URL.revokeObjectURL(videoToRemove.preview);
+      if (videoToRemove.preview) URL.revokeObjectURL(videoToRemove.preview);
+      if (videoToRemove.audioUrl) URL.revokeObjectURL(videoToRemove.audioUrl);
     }
   };
 
@@ -187,7 +189,6 @@ function TimelineMovie() {
       const { fetchFile } = window.FFmpeg;
       
       if (!ffmpeg.isLoaded()) {
-        console.log('Loading FFmpeg core...');
         await ffmpeg.load();
       }
 
@@ -195,19 +196,8 @@ function TimelineMovie() {
         setProgress(Math.min(Math.round(ratio * 95), 95));
       });
 
-      for (let i = 0; i < videos.length; i++) {
-        await ffmpeg.FS('writeFile', `input_${i}.mp4`, await fetchFile(videos[i].file));
-      }
-
-      try {
-        const fontResponse = await fetch('/font.ttf');
-        const fontBuffer = await fontResponse.arrayBuffer();
-        await ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
-      } catch (e) {}
-
       let videoFilter = '';
       let concatInput = '';
-      
       const args = [];
       let inputCount = 0;
 
@@ -227,17 +217,13 @@ function TimelineMovie() {
 
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
-        
-        // 영상 필터 (크기 조절 및 자막)
         videoFilter += `[${vInput}:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v${i}];`;
         
-        // 오디오 필터: 녹음된 오디오가 있으면 그것을 사용, 없으면 영상 원본 오디오 사용
         if (aInput !== -1) {
-          videoFilter += `[${aInput}:a]anull[a${i}];`; // 녹음된 오디오
+          videoFilter += `[${aInput}:a]anull[a${i}];`;
         } else {
-          videoFilter += `[${vInput}:a]anull[a${i}];`; // 원본 오디오
+          videoFilter += `[${vInput}:a]anull[a${i}];`;
         }
-        
         concatInput += `[v${i}][a${i}]`;
       }
       
@@ -245,8 +231,6 @@ function TimelineMovie() {
       args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', 'output.mp4');
 
       await ffmpeg.run(...args);
-      setProgress(98);
-
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
       const outUrl = URL.createObjectURL(outBlob);
@@ -258,8 +242,7 @@ function TimelineMovie() {
 
       setProgress(100);
       const a = document.createElement('a');
-      a.href = outUrl;
-      a.download = `${movieTitle || 'baby_movie'}.mp4`;
+      a.href = outUrl; a.download = `${movieTitle || 'baby_movie'}.mp4`;
       a.click();
       alert('영상이 성공적으로 저장되었습니다!');
     } catch (error) {
@@ -272,18 +255,16 @@ function TimelineMovie() {
 
   return (
     <div className="timeline-container" ref={containerRef}>
-      {/* 업로드 로딩 오버레이 */}
       {isUploading && (
         <div className="processing-overlay">
           <div className="processing-content">
             <Loader2 className="spinner" size={48} />
             <h2>영상을 업로드 중입니다...</h2>
-            <p>업로드 중이므로 잠시만 기다려 주세요. <br/>소중한 추억을 안전하게 불러오고 있습니다.</p>
+            <p>사진첩을 닫고 잠시만 기다려 주세요.</p>
           </div>
         </div>
       )}
 
-      {/* 영상 병합 로딩 오버레이 */}
       {isExtracting && (
         <div className="processing-overlay">
           <div className="processing-content">
@@ -312,7 +293,7 @@ function TimelineMovie() {
 
       <div className="video-upload-section glass-panel">
         <div className="timeline-line"></div>
-        <div className="upload-btn-wrapper" onClick={() => document.getElementById('video-upload').click()}>
+        <div className="upload-btn-wrapper" onClick={(e) => { e.preventDefault(); document.getElementById('video-upload').click(); }}>
           <input type="file" id="video-upload" multiple accept="video/*" style={{ display: 'none' }} onChange={handleVideoUpload} />
           <div className="upload-icon-wrapper">
             <Plus size={48} color="var(--color-primary-peach)" />
