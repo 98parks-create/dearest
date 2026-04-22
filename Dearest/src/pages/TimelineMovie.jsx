@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { 
-  Plus, Play, Save, Loader2, Check, AlertCircle, 
+import {
+  Plus, Play, Save, Loader2, Check, AlertCircle,
   Trash2, ArrowUp, ArrowDown, Mic, Square, Volume2,
   ChevronUp, ChevronDown, Film, X, Download
 } from 'lucide-react';
@@ -60,11 +60,11 @@ function TimelineMovie() {
       // 2. 권한 요청
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       window._currentStream = stream;
-      
+
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      
+
       mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
@@ -118,7 +118,7 @@ function TimelineMovie() {
   const handleVideoUpload = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
-    
+
     setTimeout(async () => {
       setIsUploading(true);
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -148,7 +148,7 @@ function TimelineMovie() {
           });
           currentTotalDuration += duration;
         }
-        
+
         setVideos(currentVideos);
         setTotalDuration(currentTotalDuration);
       } catch (error) {
@@ -206,14 +206,14 @@ function TimelineMovie() {
     try {
       if (!ffmpegRef.current) {
         const { createFFmpeg } = window.FFmpeg;
-        ffmpegRef.current = createFFmpeg({ 
+        ffmpegRef.current = createFFmpeg({
           log: true,
           corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
         });
       }
       const ffmpeg = ffmpegRef.current;
       const { fetchFile } = window.FFmpeg;
-      
+
       if (!ffmpeg.isLoaded()) {
         await ffmpeg.load();
       }
@@ -253,7 +253,7 @@ function TimelineMovie() {
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
         videoFilter += `[${vInput}:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v${i}];`;
-        
+
         if (aInput !== -1) {
           videoFilter += `[${aInput}:a]anull[a${i}];`;
         } else {
@@ -261,7 +261,7 @@ function TimelineMovie() {
         }
         concatInput += `[v${i}][a${i}]`;
       }
-      
+
       videoFilter += `${concatInput}concat=n=${videos.length}:v=1:a=1[v_out][a_out]`;
       args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', 'output.mp4');
 
@@ -269,16 +269,16 @@ function TimelineMovie() {
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
       const outUrl = URL.createObjectURL(outBlob);
-      
-      const fileName = `${user.id}/movie_${Date.now()}.mp4`;
-      await supabase.storage.from('dearest_media').upload(`movies/${fileName}`, outBlob);
-      const { data: { publicUrl } } = supabase.storage.from('dearest_media').getPublicUrl(`movies/${fileName}`);
+
+      const storagePath = `${user.id}/movie_${Date.now()}.mp4`;
+      await supabase.storage.from('dearest_media').upload(`movies/${storagePath}`, outBlob);
+      const { data: { publicUrl } } = supabase.storage.from('dearest_media').getPublicUrl(`movies/${storagePath}`);
       await supabase.from('movies').insert({ user_id: user.id, video_url: publicUrl, title: movieTitle || '성장 기록 영상' });
 
       setProgress(100);
-      
-      const fileName = `${movieTitle || 'baby_movie'}.mp4`;
-      const file = new File([data.buffer], fileName, { type: 'video/mp4' });
+
+      const shareFileName = `${movieTitle || 'baby_movie'}.mp4`;
+      const file = new File([data.buffer], shareFileName, { type: 'video/mp4' });
 
       // 모바일 공유하기 지원 여부 확인
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -286,21 +286,21 @@ function TimelineMovie() {
           await navigator.share({
             files: [file],
             title: movieTitle || '성장 기록 영상',
-            text: '데어리스트에서 제작한 우리 아이 성장 영상입니다.',
+            text: 'Dearest에서 제작한 우리 아이 성장 영상입니다.',
           });
         } catch (shareError) {
           console.log('Share cancelled or failed, falling back to download');
           const a = document.createElement('a');
-          a.href = outUrl; a.download = fileName;
+          a.href = outUrl; a.download = shareFileName;
           a.click();
         }
       } else {
         // 공유 미지원 환경 (PC 등)
         const a = document.createElement('a');
-        a.href = outUrl; a.download = fileName;
+        a.href = outUrl; a.download = shareFileName;
         a.click();
       }
-      
+
       alert('영상이 제작되었습니다!');
     } catch (error) {
       console.error('Merge failed:', error);
@@ -312,13 +312,13 @@ function TimelineMovie() {
 
   return (
     <div className="timeline-container" ref={containerRef}>
-      <input 
-        type="file" 
-        id="video-upload" 
-        multiple 
-        accept="video/*" 
-        style={{ display: 'none' }} 
-        onChange={handleVideoUpload} 
+      <input
+        type="file"
+        id="video-upload"
+        multiple
+        accept="video/*"
+        style={{ display: 'none' }}
+        onChange={handleVideoUpload}
       />
 
       {isUploading && (
@@ -326,7 +326,7 @@ function TimelineMovie() {
           <div className="processing-content">
             <Loader2 className="spinner" size={48} />
             <h2>영상을 불러오는 중입니다...</h2>
-            <p>영상 길이에 따라 시간이 소요될 수 있습니다. <br/>잠시만 기다려 주세요.</p>
+            <p>영상 길이에 따라 시간이 소요될 수 있습니다. <br />잠시만 기다려 주세요.</p>
           </div>
         </div>
       )}
@@ -347,7 +347,7 @@ function TimelineMovie() {
       <div className="timeline-header">
         <h1>성장 타임라인</h1>
         <p>아이의 소중한 순간들을 하나의 영화로 만들어보세요.</p>
-        
+
         <div className="limit-info-section">
           <div className="limit-badge">
             현재 길이: <span className={totalDuration > (profile?.is_subscribed ? 600 : 15) ? 'over-limit' : ''}>
@@ -368,7 +368,7 @@ function TimelineMovie() {
             <p style={{ fontSize: '0.85rem', color: '#888' }}>영상을 추가하면 제목과 자막을 넣을 수 있습니다.</p>
           </div>
         </label>
-        
+
         <div className="upload-warning-text" style={{ textAlign: 'center', fontSize: '0.85rem', color: '#888', marginTop: '1rem', padding: '0 1rem' }}>
           ⚠️ 여러 영상을 한꺼번에 업로드 시 영상 길이에 따라 소요시간이 걸릴 수 있습니다.
         </div>
@@ -389,17 +389,17 @@ function TimelineMovie() {
                 <div className="video-name">{video.file.name}</div>
                 <div className="comment-group" onClick={(e) => e.stopPropagation()}>
                   <label onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>💌 영상 자막</label>
-                  <input 
-                    type="text" 
-                    className="comment-input" 
-                    placeholder="자막 입력..." 
-                    value={video.comment} 
+                  <input
+                    type="text"
+                    className="comment-input"
+                    placeholder="자막 입력..."
+                    value={video.comment}
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
-                    onChange={(e) => handleCommentChange(video.id, e.target.value)} 
+                    onChange={(e) => handleCommentChange(video.id, e.target.value)}
                   />
                 </div>
-                
+
                 <div className="item-voice-control">
                   {recordingVideoId === video.id ? (
                     <div role="button" className="voice-btn recording" onClick={(e) => { e.preventDefault(); e.stopPropagation(); stopRecording(); }}>
@@ -428,11 +428,11 @@ function TimelineMovie() {
               <label>🎬 영화 제목</label>
               <input type="text" className="movie-title-input" placeholder="제목 입력..." value={movieTitle} onChange={(e) => setMovieTitle(e.target.value)} />
             </div>
-            <div 
-              role="button" 
-              className={`btn btn-primary extract-btn ${isExtracting ? 'disabled' : ''}`} 
+            <div
+              role="button"
+              className={`btn btn-primary extract-btn ${isExtracting ? 'disabled' : ''}`}
               style={{ pointerEvents: isExtracting ? 'none' : 'auto', cursor: isExtracting ? 'default' : 'pointer' }}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isExtracting) extractVideo(); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (!isExtracting) extractVideo(); }}
             >
               {isExtracting ? (
                 <div className="progress-status" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
