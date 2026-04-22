@@ -264,22 +264,29 @@ function TimelineMovie() {
         let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
         const segmentArgs = ['-i', `in_${i}.mp4` ];
         
+        // 오디오 형식 감지
+        let audioExt = 'webm';
         if (video.audioBlob) {
-          await ffmpeg.FS('writeFile', `au_${i}.webm`, await fetchFile(video.audioBlob));
-          segmentArgs.push('-i', `au_${i}.webm`);
+          audioExt = video.audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
+        }
+        
+        if (video.audioBlob) {
+          await ffmpeg.FS('writeFile', `au_${i}.${audioExt}`, await fetchFile(video.audioBlob));
+          segmentArgs.push('-i', `au_${i}.${audioExt}`);
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         } else {
           segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 현재 조각 가공 (segment.ts)
+        // 현재 조각 가공 (segment.ts) - 모바일 최적화 비트레이트 적용
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
-          '-g', '30', '-r', '30', '-fps_mode', 'cfr',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',
+          '-maxrate', '2M', '-bufsize', '4M', // 비트레이트 상한 설정
+          '-g', '30', '-r', '30', '-vsync', 'cfr', 
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
           'segment.ts'
@@ -287,24 +294,21 @@ function TimelineMovie() {
 
         // 가공 원본 즉시 삭제
         ffmpeg.FS('unlink', `in_${i}.mp4`);
-        if (video.audioBlob) ffmpeg.FS('unlink', `au_${i}.webm`);
+        if (video.audioBlob) {
+          try { ffmpeg.FS('unlink', `au_${i}.${audioExt}`); } catch(e) {}
+        }
 
-        // 롤링 병합: 기존 결과(main.ts)가 있으면 합치고, 없으면 segment.ts를 main.ts로
+        // 롤링 병합: genpts 플래그로 타임라인 강제 정렬
         const files = ffmpeg.FS('readdir', '/');
         if (files.includes('main.ts')) {
           ffmpeg.FS('writeFile', 'list.txt', "file 'main.ts'\nfile 'segment.ts'");
-          await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'combined.ts');
-          
-          // JS 메모리를 쓰지 않고 엔진 내부에서 파일 교체
+          await ffmpeg.run('-f', 'concat', '-safe', '0', '-fflags', '+genpts', '-i', 'list.txt', '-c', 'copy', 'combined.ts');
           ffmpeg.FS('unlink', 'main.ts');
           ffmpeg.FS('unlink', 'segment.ts');
           ffmpeg.FS('unlink', 'list.txt');
-          await ffmpeg.run('-i', 'combined.ts', '-c', 'copy', 'main.ts');
-          ffmpeg.FS('unlink', 'combined.ts');
+          ffmpeg.FS('rename', 'combined.ts', 'main.ts');
         } else {
-          // 첫 조각은 바로 main.ts로 변환
-          await ffmpeg.run('-i', 'segment.ts', '-c', 'copy', 'main.ts');
-          ffmpeg.FS('unlink', 'segment.ts');
+          ffmpeg.FS('rename', 'segment.ts', 'main.ts');
         }
       }
 
@@ -351,7 +355,14 @@ function TimelineMovie() {
       alert('영상이 제작되었습니다!');
     } catch (error) {
       console.error('Merge failed:', error);
-      alert('영상 병합 중 오류가 발생했습니다. (영상이 너무 길거나 고화질인 경우 메모리 부족으로 중단될 수 있습니다)');
+      // 에러 발생 시 모든 임시 파일 강제 삭제 (클린업)
+      try {
+        const files = ffmpegRef.current.FS('readdir', '/');
+        const temps = files.filter(f => f.endsWith('.ts') || f.endsWith('.mp4') || f.endsWith('.webm') || f === 'list.txt');
+        temps.forEach(f => ffmpegRef.current.FS('unlink', f));
+      } catch (e) {}
+      
+      alert('영상 병합 중 오류가 발생했습니다. (기기 메모리가 부족하거나 영상이 너무 길 수 있습니다)');
     } finally {
       setTimeout(() => { setIsExtracting(false); setProgress(0); }, 500);
     }
