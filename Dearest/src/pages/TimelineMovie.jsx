@@ -309,10 +309,19 @@ function TimelineMovie() {
       }
 
       currentIdx = videos.length; 
-      // 2. 고속 컨캣 프로토콜 병합
-      const tsFiles = videos.map((_, i) => `temp_${i}.ts`).join('|');
+      // 2. 고속 컨캣 디먹서(Demuxer) 병합 (목록 파일 방식)
+      const listContent = videos.map((_, i) => `file 'temp_${i}.ts'`).join('\n');
+      ffmpeg.FS('writeFile', 'list.txt', listContent);
+      
+      // 파일 존재 여부 최종 확인
+      const existingFiles = ffmpeg.FS('readdir', '/');
+      const missingFiles = videos.filter((_, i) => !existingFiles.includes(`temp_${i}.ts`));
+      if (missingFiles.length > 0) {
+        throw new Error(`일부 영상 조각 생성 실패: ${missingFiles.length}개 누락`);
+      }
+
       await ffmpeg.run(
-        '-i', `concat:${tsFiles}`,
+        '-f', 'concat', '-safe', '0', '-i', 'list.txt',
         '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
       );
 
@@ -320,6 +329,7 @@ function TimelineMovie() {
       for (let i = 0; i < videos.length; i++) {
         try { ffmpeg.FS('unlink', `temp_${i}.ts`); } catch(e) {}
       }
+      try { ffmpeg.FS('unlink', 'list.txt'); } catch(e) {}
 
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
