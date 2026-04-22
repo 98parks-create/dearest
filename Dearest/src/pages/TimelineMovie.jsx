@@ -284,7 +284,7 @@ function TimelineMovie() {
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
-        await ffmpeg.exec([...args, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30', '-r', '30', '-vsync', 'cfr', '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-pix_fmt', 'yuv420p', 'seg.ts']);
+        await ffmpeg.exec([...args, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '32', '-r', '30', '-vsync', 'cfr', '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-pix_fmt', 'yuv420p', 'seg.ts']);
         await ffmpeg.deleteFile('in.mp4');
         try { await ffmpeg.deleteFile('au.webm'); } catch(e) {}
 
