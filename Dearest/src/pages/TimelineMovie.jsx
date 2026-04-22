@@ -222,6 +222,15 @@ function TimelineMovie() {
         setProgress(Math.min(Math.round(ratio * 95), 95));
       });
 
+      // 자막용 폰트 로드
+      try {
+        const fontResponse = await fetch('/font.ttf');
+        const fontBuffer = await fontResponse.arrayBuffer();
+        await ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
+      } catch (e) {
+        console.warn("Font load failed:", e);
+      }
+
       let videoFilter = '';
       let concatInput = '';
       const args = [];
@@ -350,8 +359,8 @@ function TimelineMovie() {
                 <video src={video.preview} className="video-thumb" playsInline muted autoPlay loop />
                 <div className="duration-tag">{video.duration.toFixed(1)}s</div>
                 <div className="video-move-controls">
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveVideo(index, -1); }} disabled={index === 0}><ChevronUp size={14} /></button>
-                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveVideo(index, 1); }} disabled={index === videos.length - 1}><ChevronDown size={14} /></button>
+                  <div role="button" className={`icon-btn ${index === 0 ? 'disabled' : ''}`} style={{ pointerEvents: index === 0 ? 'none' : 'auto' }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveVideo(index, -1); }}><ChevronUp size={14} /></div>
+                  <div role="button" className={`icon-btn ${index === videos.length - 1 ? 'disabled' : ''}`} style={{ pointerEvents: index === videos.length - 1 ? 'none' : 'auto' }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveVideo(index, 1); }}><ChevronDown size={14} /></div>
                 </div>
               </div>
               <div className="video-info">
@@ -371,22 +380,22 @@ function TimelineMovie() {
                 
                 <div className="item-voice-control">
                   {recordingVideoId === video.id ? (
-                    <button type="button" className="voice-btn recording" onClick={(e) => { e.preventDefault(); e.stopPropagation(); stopRecording(); }}>
+                    <div role="button" className="voice-btn recording" onClick={(e) => { e.preventDefault(); e.stopPropagation(); stopRecording(); }}>
                       <Square size={14} /> 녹음 중단
-                    </button>
+                    </div>
                   ) : video.audioUrl ? (
                     <div className="voice-added-group">
                       <audio src={video.audioUrl} controls className="mini-audio-item" />
-                      <button type="button" className="voice-del-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeAudio(video.id); }}>삭제</button>
+                      <div role="button" className="voice-del-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeAudio(video.id); }}>삭제</div>
                     </div>
                   ) : (
-                    <button type="button" className="voice-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); startRecording(video.id); }}>
+                    <div role="button" className="voice-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); startRecording(video.id); }}>
                       <Mic size={14} /> 목소리 입히기
-                    </button>
+                    </div>
                   )}
                 </div>
               </div>
-              <button type="button" className="remove-btn" onClick={(e) => { e.preventDefault(); removeVideo(video.id); }}><X size={20} /></button>
+              <div role="button" className="remove-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeVideo(video.id); }}><X size={20} /></div>
             </div>
           ))}
         </div>
@@ -395,20 +404,16 @@ function TimelineMovie() {
           <div className="merge-action-area glass-panel">
             <div className="title-input-section">
               <label>🎬 영화 제목</label>
-              <input type="text" className="movie-title-input" placeholder="예: 우리 아이의 첫 걸음마" value={movieTitle} onChange={(e) => setMovieTitle(e.target.value)} />
+              <input type="text" className="movie-title-input" placeholder="제목 입력..." value={movieTitle} onChange={(e) => setMovieTitle(e.target.value)} />
             </div>
-            <button type="button" className="btn btn-primary extract-btn" onClick={(e) => { e.preventDefault(); extractVideo(); }} disabled={isExtracting}>
-              {isExtracting ? (
-                <div className="progress-status">
-                  <Loader2 className="spinner" size={24} />
-                  <div className="progress-info">
-                    <div className="progress-label">영화 제작 중... {progress}%</div>
-                  </div>
-                </div>
-              ) : (
-                <><Film size={18} /> 하나의 영화로 만들기 & 다운로드</>
-              )}
-            </button>
+            <div 
+              role="button" 
+              className={`btn btn-primary extract-btn ${isExtracting ? 'disabled' : ''}`} 
+              style={{ pointerEvents: isExtracting ? 'none' : 'auto', cursor: isExtracting ? 'default' : 'pointer' }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(!isExtracting) extractVideo(); }}
+            >
+              {isExtracting ? <Loader2 className="spinner" size={24} /> : <><Film size={18} /> 영화 만들기</>}
+            </div>
           </div>
         )}
       </div>
