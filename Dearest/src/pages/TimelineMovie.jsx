@@ -279,17 +279,18 @@ function TimelineMovie() {
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
-        // 현재 조각 가공 (segment.ts) - 모바일 최적화 비트레이트 적용
+        // 현재 조각 가공 (segment.mp4) - 용량 최적화를 위해 mp4 사용
         await ffmpeg.run(
           ...segmentArgs,
           '-filter_complex', filter,
           '-map', '[v]', '-map', '[a]',
           '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',
-          '-maxrate', '2M', '-bufsize', '4M', // 비트레이트 상한 설정
+          '-maxrate', '2M', '-bufsize', '4M',
           '-g', '30', '-r', '30', '-vsync', 'cfr', 
           '-c:a', 'aac', '-ar', '44100', '-ac', '2', 
           '-pix_fmt', 'yuv420p', '-video_track_timescale', '30000',
-          'segment.ts'
+          '-f', 'mp4', '-movflags', '+faststart',
+          'segment.mp4'
         );
 
         // 가공 원본 즉시 삭제
@@ -298,24 +299,23 @@ function TimelineMovie() {
           try { ffmpeg.FS('unlink', `au_${i}.${audioExt}`); } catch(e) {}
         }
 
-        // 롤링 병합: genpts 플래그로 타임라인 강제 정렬
+        // 롤링 병합: mp4들끼리 안전하게 결합
         const files = ffmpeg.FS('readdir', '/');
-        if (files.includes('main.ts')) {
-          ffmpeg.FS('writeFile', 'list.txt', "file 'main.ts'\nfile 'segment.ts'");
-          await ffmpeg.run('-f', 'concat', '-safe', '0', '-fflags', '+genpts', '-i', 'list.txt', '-c', 'copy', 'combined.ts');
-          ffmpeg.FS('unlink', 'main.ts');
-          ffmpeg.FS('unlink', 'segment.ts');
+        if (files.includes('main.mp4')) {
+          ffmpeg.FS('writeFile', 'list.txt', "file 'main.mp4'\nfile 'segment.mp4'");
+          await ffmpeg.run('-f', 'concat', '-safe', '0', '-fflags', '+genpts', '-i', 'list.txt', '-c', 'copy', 'combined.mp4');
+          ffmpeg.FS('unlink', 'main.mp4');
+          ffmpeg.FS('unlink', 'segment.mp4');
           ffmpeg.FS('unlink', 'list.txt');
-          ffmpeg.FS('rename', 'combined.ts', 'main.ts');
+          ffmpeg.FS('rename', 'combined.mp4', 'main.mp4');
         } else {
-          ffmpeg.FS('rename', 'segment.ts', 'main.ts');
+          ffmpeg.FS('rename', 'segment.mp4', 'main.mp4');
         }
       }
 
       currentIdx = videos.length; 
-      // 최종 변환: main.ts -> output.mp4
-      await ffmpeg.run('-i', 'main.ts', '-c', 'copy', '-movflags', '+faststart', 'output.mp4');
-      ffmpeg.FS('unlink', 'main.ts');
+      // 최종 결과물 확정
+      ffmpeg.FS('rename', 'main.mp4', 'output.mp4');
 
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
