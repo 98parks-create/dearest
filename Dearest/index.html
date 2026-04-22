@@ -18,7 +18,9 @@
 
     <!-- 토스 결제 스크립트 (Proxy를 통해 보안 정책 우회) -->
     <script src="/toss-api/v1"></script>
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js"></script>
+    <!-- FFmpeg 0.12.x 최신 엔진 (모바일 호환성 강화) -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.15/dist/umd/ffmpeg.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/util@0.12.2/dist/umd/index.js"></script>
   </head>
   <body class="notranslate">
     <div id="root" class="notranslate"></div>

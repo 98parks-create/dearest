@@ -218,92 +218,83 @@ function TimelineMovie() {
     setStatus('엔진 초기화 중...');
     
     try {
+      const { FFmpeg } = window.FFmpeg || {};
+      const { fetchFile, toBlobURL } = window.FFmpegUtil || {};
+
+      if (!FFmpeg) {
+        throw new Error('FFmpeg 라이브러리가 로드되지 않았습니다.');
+      }
+
       if (!ffmpegRef.current) {
-        const { createFFmpeg } = window.FFmpeg;
-        ffmpegRef.current = createFFmpeg({
-          log: true,
-          corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-        });
+        ffmpegRef.current = new FFmpeg();
       }
       const ffmpeg = ffmpegRef.current;
-      if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
-      // 폰트 준비 (한 번만 수행)
-      try {
-        const files = ffmpeg.FS('readdir', '/');
-        if (!files.includes('font.ttf')) {
-          setStatus('글꼴 데이터 준비 중...');
-          const fontResponse = await fetch('/font.ttf');
-          const fontBuffer = await fontResponse.arrayBuffer();
-          ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
-        }
-      } catch (e) { console.warn("Font preparation failed:", e); }
-
-      let currentIdx = 0;
-      ffmpeg.setProgress(({ ratio }) => {
+      ffmpeg.on('log', ({ message }) => console.log(message));
+      ffmpeg.on('progress', ({ progress: p }) => {
         const totalSegments = videos.length + 1;
-        const baseProgress = (currentIdx / totalSegments) * 100;
-        const currentSegmentProgress = (Math.max(0, Math.min(1, ratio)) / totalSegments) * 100;
-        setProgress(Math.min(Math.round(baseProgress + currentSegmentProgress), 99));
+        const base = (currentIdx / totalSegments) * 100;
+        const current = (p / totalSegments) * 100;
+        setProgress(Math.min(Math.round(base + current), 99));
       });
 
-      // 순차적 롤링 병합 시작
+      setStatus('엔진 데이터 로딩 중...');
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      });
+
+      // 폰트 준비
+      try {
+        const fontData = await fetchFile('/font.ttf');
+        await ffmpeg.writeFile('font.ttf', fontData);
+      } catch (e) { console.warn("Font failed:", e); }
+
+      let currentIdx = 0;
       for (let i = 0; i < videos.length; i++) {
         currentIdx = i;
         const video = videos[i];
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
         
-        setStatus(`${i + 1}번째 영상 처리 중...`);
-        const videoBuffer = await video.file.arrayBuffer();
-        ffmpeg.FS('writeFile', 'input_src.mp4', new Uint8Array(videoBuffer));
+        setStatus(`${i + 1}번째 영상 가공 중...`);
+        await ffmpeg.writeFile('in.mp4', await fetchFile(video.file));
         
         let filter = `[0:v]scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2,setsar=1,setpts=PTS-STARTPTS,fps=30${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=32:x=(w-text_w)/2:y=h-150:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
-        const segmentArgs = ['-i', 'input_src.mp4' ];
+        const args = ['-i', 'in.mp4' ];
         
         if (video.audioBlob) {
-          const audioBuffer = await video.audioBlob.arrayBuffer();
-          ffmpeg.FS('writeFile', 'audio_src.webm', new Uint8Array(audioBuffer));
-          segmentArgs.push('-i', 'audio_src.webm');
+          await ffmpeg.writeFile('au.webm', await fetchFile(video.audioBlob));
+          args.push('-i', 'au.webm');
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         } else {
-          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
+          args.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
           filter += `[1:a]aresample=44100,asetpts=PTS-STARTPTS[a]`;
         }
 
-        await ffmpeg.run(
-          ...segmentArgs,
-          '-filter_complex', filter,
-          '-map', '[v]', '-map', '[a]',
-          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30',
-          '-r', '30', '-vsync', 'cfr', 
-          '-c:a', 'aac', '-ar', '44100', '-ac', '2', 
-          '-pix_fmt', 'yuv420p',
-          'segment.ts'
-        );
+        await ffmpeg.exec([...args, '-filter_complex', filter, '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '30', '-r', '30', '-vsync', 'cfr', '-c:a', 'aac', '-ar', '44100', '-ac', '2', '-pix_fmt', 'yuv420p', 'seg.ts']);
+        await ffmpeg.deleteFile('in.mp4');
+        try { await ffmpeg.deleteFile('au.webm'); } catch(e) {}
 
-        ffmpeg.FS('unlink', 'input_src.mp4');
-        try { ffmpeg.FS('unlink', 'audio_src.webm'); } catch(e) {}
-
-        if (ffmpeg.FS('readdir', '/').includes('main.ts')) {
-          setStatus(`${i + 1}번째 조각 합치는 중...`);
-          ffmpeg.FS('writeFile', 'list.txt', "file 'main.ts'\nfile 'segment.ts'");
-          await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'combined.ts');
-          ffmpeg.FS('unlink', 'main.ts');
-          ffmpeg.FS('unlink', 'segment.ts');
-          ffmpeg.FS('unlink', 'list.txt');
-          ffmpeg.FS('rename', 'combined.ts', 'main.ts');
+        const files = await ffmpeg.listDir('/');
+        if (files.some(f => f.name === 'main.ts')) {
+          setStatus(`${i + 1}번째 조각 이어붙이는 중...`);
+          await ffmpeg.writeFile('list.txt', "file 'main.ts'\nfile 'seg.ts'");
+          await ffmpeg.exec(['-f', 'concat', '-safe', '0', '-i', 'list.txt', '-c', 'copy', 'combined.ts']);
+          await ffmpeg.deleteFile('main.ts'); await ffmpeg.deleteFile('seg.ts'); await ffmpeg.deleteFile('list.txt');
+          await ffmpeg.rename('combined.ts', 'main.ts');
         } else {
-          ffmpeg.FS('rename', 'segment.ts', 'main.ts');
+          await ffmpeg.rename('seg.ts', 'main.ts');
         }
       }
 
       currentIdx = videos.length; 
-      setStatus('최종 영상 파일 생성 중...');
-      await ffmpeg.run('-i', 'main.ts', '-c', 'copy', '-movflags', '+faststart', 'output.mp4');
-      ffmpeg.FS('unlink', 'main.ts');
+      setStatus('최종 파일 생성 중...');
+      await ffmpeg.exec(['-i', 'main.ts', '-c', 'copy', '-movflags', '+faststart', 'output.mp4']);
+      await ffmpeg.deleteFile('main.ts');
 
-      const data = ffmpeg.FS('readFile', 'output.mp4');
+      const data = await ffmpeg.readFile('output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
       const storagePath = `${user.id}/movie_${Date.now()}.mp4`;
       
@@ -321,22 +312,13 @@ function TimelineMovie() {
       console.error('Merge failed:', error);
       alert(`제작 실패: ${error.message}`);
     } finally {
-      setIsExtracting(false);
-      setProgress(0);
-      setStatus('');
+      setIsExtracting(false); setProgress(0); setStatus('');
     }
   };
 
   return (
     <div className="timeline-container" ref={containerRef}>
-      <input
-        type="file"
-        id="video-upload"
-        multiple
-        accept="video/*"
-        style={{ display: 'none' }}
-        onChange={handleVideoUpload}
-      />
+      <input type="file" id="video-upload" multiple accept="video/*" style={{ display: 'none' }} onChange={handleVideoUpload} />
 
       {isUploading && (
         <div className="processing-overlay">
@@ -352,12 +334,12 @@ function TimelineMovie() {
         <div className="processing-overlay">
           <div className="processing-content">
             <Loader2 className="spinner" size={48} />
-            <h2>영상을 제작하고 있습니다</h2>
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: `${progress}%` }}></div>
             </div>
-            <p>{progress}% 완료</p>
-            <p className="status-text" style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>{status}</p>
+            <p style={{ fontWeight: 'bold', fontSize: '1.2rem', margin: '10px 0' }}>{progress}% 완료</p>
+            <h2 style={{ marginBottom: '0.5rem' }}>영상을 제작하고 있습니다</h2>
+            <p className="status-text" style={{ fontSize: '0.9rem', color: '#666' }}>{status}</p>
           </div>
         </div>
       )}
