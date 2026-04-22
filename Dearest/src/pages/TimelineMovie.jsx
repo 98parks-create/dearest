@@ -21,6 +21,8 @@ function TimelineMovie() {
   const [progress, setProgress] = useState(0);
   const [videos, setVideos] = useState([]);
   const [recordingVideoId, setRecordingVideoId] = useState(null);
+  const [movieTitle, setMovieTitle] = useState('');
+  const [totalDuration, setTotalDuration] = useState(0);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const ffmpegRef = useRef(null);
