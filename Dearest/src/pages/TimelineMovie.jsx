@@ -20,13 +20,7 @@ function TimelineMovie() {
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [videos, setVideos] = useState([]);
-  const [recording, setRecording] = useState(false);
-  const [audioBlob, setAudioBlob] = useState(null);
-  const [audioUrl, setAudioUrl] = useState(null);
-  const [currentPreviewIndex, setCurrentPreviewIndex] = useState(-1);
-  const [movieTitle, setMovieTitle] = useState('');
-  const [totalDuration, setTotalDuration] = useState(0);
-  
+  const [recordingVideoId, setRecordingVideoId] = useState(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const ffmpegRef = useRef(null);
@@ -48,13 +42,9 @@ function TimelineMovie() {
     return () => ScrollTrigger.getAll().forEach(t => t.kill());
   }, [videos]);
 
-  const startRecording = async () => {
+  const startRecording = async (videoId) => {
     if (!profile?.is_subscribed) {
       alert('목소리 녹음 기능은 프리미엄 전용입니다. 멤버십을 업그레이드 해주세요!');
-      return;
-    }
-    if (videos.length === 0) {
-      alert('녹음 전 먼저 영상을 추가해 주세요!');
       return;
     }
 
@@ -68,32 +58,33 @@ function TimelineMovie() {
       mediaRecorderRef.current.onstop = () => {
         const mimeType = mediaRecorderRef.current.mimeType || 'audio/webm';
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
-        setCurrentPreviewIndex(-1);
+        const url = URL.createObjectURL(blob);
+        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, audioBlob: blob, audioUrl: url } : v));
+        setRecordingVideoId(null);
       };
       mediaRecorderRef.current.start();
-      setRecording(true);
-      setCurrentPreviewIndex(0);
+      setRecordingVideoId(videoId);
     } catch (err) {
       console.error('Recording start failed:', err);
-      if (err.name === 'NotAllowedError') {
-        alert('마이크 접근 권한이 거부되었습니다. 브라우저 설정에서 마이크 권한을 허용해주세요.');
-      } else if (err.name === 'NotFoundError') {
-        alert('연결된 마이크를 찾을 수 없습니다.');
-      } else {
-        alert('마이크 접근 중 오류가 발생했습니다: ' + err.message);
-      }
+      alert('마이크 접근 권한이 필요합니다.');
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && recording) {
+    if (mediaRecorderRef.current && recordingVideoId) {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      setRecording(false);
-      setCurrentPreviewIndex(-1);
     }
+  };
+
+  const removeAudio = (videoId) => {
+    setVideos(prev => prev.map(v => {
+      if (v.id === videoId) {
+        if (v.audioUrl) URL.revokeObjectURL(v.audioUrl);
+        return { ...v, audioBlob: null, audioUrl: null };
+      }
+      return v;
+    }));
   };
 
   const handlePreviewEnd = () => {
@@ -110,42 +101,40 @@ function TimelineMovie() {
     const files = Array.from(e.target.files);
     if (!files.length) return;
     
-    // UI 우선 반영을 위해 업로드 상태 먼저 활성화
     setIsUploading(true);
     
-    // 브라우저가 로딩 화면을 먼저 그릴 수 있도록 약간의 지연 후 처리 시작
-    setTimeout(async () => {
-      const limitDuration = profile?.is_subscribed ? 600 : 15;
-  
-      try {
-        const newVideos = [...videos];
-        let newTotalDuration = totalDuration;
-        
-        for (const file of files) {
-          const duration = await getVideoDuration(file);
-          if (newTotalDuration + duration > limitDuration) {
-            alert(`제한 시간(${limitDuration}초)을 초과한 영상은 제외되었습니다.`);
-            continue;
-          }
-          newVideos.push({
-            id: Math.random().toString(36).substr(2, 9),
-            file,
-            preview: URL.createObjectURL(file),
-            duration,
-            comment: ''
-          });
-          newTotalDuration += duration;
+    // UI 반영을 위해 micro-task 사용
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const limitDuration = profile?.is_subscribed ? 600 : 15;
+    try {
+      const newVideos = [...videos];
+      let newTotalDuration = totalDuration;
+      for (const file of files) {
+        const duration = await getVideoDuration(file);
+        if (newTotalDuration + duration > limitDuration) {
+          alert(`제한 시간(${limitDuration}초)을 초과한 영상은 제외되었습니다.`);
+          continue;
         }
-        
-        setVideos(newVideos);
-        setTotalDuration(newTotalDuration);
-      } catch (error) {
-        console.error('Upload error:', error);
-        alert('영상을 불러오는 중 오류가 발생했습니다.');
-      } finally {
-        setIsUploading(false);
+        newVideos.push({
+          id: Math.random().toString(36).substr(2, 9),
+          file,
+          preview: URL.createObjectURL(file),
+          duration,
+          comment: '',
+          audioBlob: null,
+          audioUrl: null
+        });
+        newTotalDuration += duration;
       }
-    }, 100);
+      setVideos(newVideos);
+      setTotalDuration(newTotalDuration);
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('영상을 불러오는 중 오류가 발생했습니다.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const getVideoDuration = (file) => {
@@ -219,29 +208,43 @@ function TimelineMovie() {
       } catch (e) {}
 
       let videoFilter = '';
+      let concatInput = '';
+      
+      const args = [];
+      let inputCount = 0;
+
       for (let i = 0; i < videos.length; i++) {
-        const comment = videos[i].comment || '';
+        const video = videos[i];
+        const vInput = inputCount++;
+        await ffmpeg.FS('writeFile', `v_${i}.mp4`, await fetchFile(video.file));
+        args.push('-i', `v_${i}.mp4`);
+
+        let aInput = -1;
+        if (video.audioBlob) {
+          aInput = inputCount++;
+          const ext = video.audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
+          await ffmpeg.FS('writeFile', `a_${i}.${ext}`, await fetchFile(video.audioBlob));
+          args.push('-i', `a_${i}.${ext}`);
+        }
+
+        const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
-        // 9:16 세로 비율(720x1280)로 스케일링 및 패딩
-        videoFilter += `[${i}:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v${i}];`;
+        
+        // 영상 필터 (크기 조절 및 자막)
+        videoFilter += `[${vInput}:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v${i}];`;
+        
+        // 오디오 필터: 녹음된 오디오가 있으면 그것을 사용, 없으면 영상 원본 오디오 사용
+        if (aInput !== -1) {
+          videoFilter += `[${aInput}:a]anull[a${i}];`; // 녹음된 오디오
+        } else {
+          videoFilter += `[${vInput}:a]anull[a${i}];`; // 원본 오디오
+        }
+        
+        concatInput += `[v${i}][a${i}]`;
       }
       
-      let concatV = '';
-      for (let i = 0; i < videos.length; i++) concatV += `[v${i}]`;
-      concatV += `concat=n=${videos.length}:v=1:a=0[v_orig]`;
-
-      const args = [];
-      for (let i = 0; i < videos.length; i++) args.push('-i', `input_${i}.mp4`);
-
-      if (audioBlob) {
-        const audioExt = audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
-        const audioFileName = `voice.${audioExt}`;
-        await ffmpeg.FS('writeFile', audioFileName, await fetchFile(audioBlob));
-        args.push('-i', audioFileName);
-        args.push('-filter_complex', `${videoFilter}${concatV}`, '-map', '[v_orig]', '-map', `${videos.length}:a`, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', 'output.mp4');
-      } else {
-        args.push('-filter_complex', `${videoFilter}${concatV}`, '-map', '[v_orig]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', 'output.mp4');
-      }
+      videoFilter += `${concatInput}concat=n=${videos.length}:v=1:a=1[v_out][a_out]`;
+      args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', 'output.mp4');
 
       await ffmpeg.run(...args);
       setProgress(98);
@@ -306,51 +309,6 @@ function TimelineMovie() {
               {totalDuration.toFixed(1)}s
             </span> / {profile?.is_subscribed ? '600s' : '15s'}
           </div>
-          
-          <div className="voice-record-dashboard glass-panel">
-            <div className="voice-header">
-              <Volume2 size={18} />
-              <span>배경 음성 녹음 {profile?.is_subscribed ? '' : '(Premium)'}</span>
-            </div>
-            
-            {recording && currentPreviewIndex >= 0 && (
-              <div className="recording-monitor fade-in">
-                <div className="monitor-badge">REC 모니터링 중</div>
-                <video 
-                  src={videos[currentPreviewIndex].preview} 
-                  autoPlay muted playsInline
-                  onEnded={handlePreviewEnd}
-                  className="monitor-video"
-                />
-                <div className="monitor-info">
-                  영상 {currentPreviewIndex + 1} / {videos.length}
-                </div>
-              </div>
-            )}
-            
-            <div className="voice-controls">
-              {!recording ? (
-                <button className={`mic-btn ${recording ? 'recording' : ''}`} onClick={startRecording} disabled={isExtracting}>
-                  <Mic size={20} />
-                  {audioUrl ? '다시 녹음' : '목소리 입히기'}
-                </button>
-              ) : (
-                <button className="mic-btn recording" onClick={stopRecording}>
-                  <Square size={20} />
-                  녹음 중단
-                </button>
-              )}
-
-              {audioUrl && !recording && (
-                <div className="audio-preview fade-in">
-                  <audio src={audioUrl} controls className="mini-audio" />
-                  <button className="delete-audio-btn" onClick={() => { setAudioBlob(null); setAudioUrl(null); }}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -384,6 +342,23 @@ function TimelineMovie() {
                 <div className="comment-group">
                   <label>💌 영상 자막</label>
                   <input type="text" className="comment-input" placeholder="자막 입력..." value={video.comment} onChange={(e) => handleCommentChange(video.id, e.target.value)} />
+                </div>
+                
+                <div className="item-voice-control">
+                  {recordingVideoId === video.id ? (
+                    <button className="voice-btn recording" onClick={stopRecording}>
+                      <Square size={14} /> 녹음 중단
+                    </button>
+                  ) : video.audioUrl ? (
+                    <div className="voice-added-group">
+                      <audio src={video.audioUrl} controls className="mini-audio-item" />
+                      <button className="voice-del-btn" onClick={() => removeAudio(video.id)}>삭제</button>
+                    </div>
+                  ) : (
+                    <button className="voice-btn" onClick={() => startRecording(video.id)}>
+                      <Mic size={14} /> 목소리 입히기
+                    </button>
+                  )}
                 </div>
               </div>
               <button className="remove-btn" onClick={() => removeVideo(video.id)}><X size={20} /></button>

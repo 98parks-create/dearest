@@ -318,6 +318,60 @@
     height: 150px;
   }
 }
+
+/* 개별 음성 녹음 스타일 */
+.item-voice-control {
+  margin-top: 0.8rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.voice-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--color-secondary-beige);
+  background: white;
+  color: #666;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.voice-btn:hover {
+  border-color: var(--color-primary-peach);
+  color: var(--color-primary-peach);
+}
+
+.voice-btn.recording {
+  background: #ffeded;
+  border-color: #ff4d4d;
+  color: #ff4d4d;
+  animation: pulse 1.5s infinite;
+}
+
+.voice-added-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mini-audio-item {
+  height: 28px;
+  width: 140px;
+}
+
+.voice-del-btn {
+  background: none;
+  border: none;
+  color: #ff4d4d;
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
 /* 입력 관련 스타일 추가 */
 .comment-group {
   display: flex;
