@@ -255,12 +255,21 @@ function TimelineMovie() {
 
   return (
     <div className="timeline-container" ref={containerRef}>
+      <input 
+        type="file" 
+        id="video-upload" 
+        multiple 
+        accept="video/*" 
+        style={{ display: 'none' }} 
+        onChange={handleVideoUpload} 
+      />
+
       {isUploading && (
         <div className="processing-overlay">
           <div className="processing-content">
             <Loader2 className="spinner" size={48} />
-            <h2>영상을 업로드 중입니다...</h2>
-            <p>사진첩을 닫고 잠시만 기다려 주세요.</p>
+            <h2>영상을 불러오는 중입니다...</h2>
+            <p>영상 길이에 따라 시간이 소요될 수 있습니다. <br/>잠시만 기다려 주세요.</p>
           </div>
         </div>
       )}
@@ -293,8 +302,7 @@ function TimelineMovie() {
 
       <div className="video-upload-section glass-panel">
         <div className="timeline-line"></div>
-        <label htmlFor="video-upload" className="upload-btn-wrapper">
-          <input type="file" id="video-upload" multiple accept="video/*" style={{ display: 'none' }} onChange={handleVideoUpload} />
+        <label htmlFor="video-upload" className="upload-btn-wrapper" onClick={(e) => e.stopPropagation()}>
           <div className="upload-icon-wrapper">
             <Plus size={48} color="var(--color-primary-peach)" />
           </div>
@@ -303,6 +311,10 @@ function TimelineMovie() {
             <p style={{ fontSize: '0.85rem', color: '#888' }}>영상을 추가하면 제목과 자막을 넣을 수 있습니다.</p>
           </div>
         </label>
+        
+        <div className="upload-warning-text" style={{ textAlign: 'center', fontSize: '0.85rem', color: '#888', marginTop: '1rem', padding: '0 1rem' }}>
+          ⚠️ 여러 영상을 한꺼번에 업로드 시 영상 길이에 따라 소요시간이 걸릴 수 있습니다.
+        </div>
 
         <div className="video-list">
           {videos.map((video, index) => (
@@ -312,8 +324,8 @@ function TimelineMovie() {
                 <video src={video.preview} className="video-thumb" playsInline muted autoPlay loop />
                 <div className="duration-tag">{video.duration.toFixed(1)}s</div>
                 <div className="video-move-controls">
-                  <button type="button" onClick={(e) => { e.preventDefault(); moveVideo(index, -1); }} disabled={index === 0}><ChevronUp size={14} /></button>
-                  <button type="button" onClick={(e) => { e.preventDefault(); moveVideo(index, 1); }} disabled={index === videos.length - 1}><ChevronDown size={14} /></button>
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveVideo(index, -1); }} disabled={index === 0}><ChevronUp size={14} /></button>
+                  <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); moveVideo(index, 1); }} disabled={index === videos.length - 1}><ChevronDown size={14} /></button>
                 </div>
               </div>
               <div className="video-info">
@@ -325,16 +337,16 @@ function TimelineMovie() {
                 
                 <div className="item-voice-control">
                   {recordingVideoId === video.id ? (
-                    <button type="button" className="voice-btn recording" onClick={(e) => { e.preventDefault(); stopRecording(); }}>
+                    <button type="button" className="voice-btn recording" onClick={(e) => { e.preventDefault(); e.stopPropagation(); stopRecording(); }}>
                       <Square size={14} /> 녹음 중단
                     </button>
                   ) : video.audioUrl ? (
                     <div className="voice-added-group">
                       <audio src={video.audioUrl} controls className="mini-audio-item" />
-                      <button type="button" className="voice-del-btn" onClick={(e) => { e.preventDefault(); removeAudio(video.id); }}>삭제</button>
+                      <button type="button" className="voice-del-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeAudio(video.id); }}>삭제</button>
                     </div>
                   ) : (
-                    <button type="button" className="voice-btn" onClick={(e) => { e.preventDefault(); startRecording(video.id); }}>
+                    <button type="button" className="voice-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); startRecording(video.id); }}>
                       <Mic size={14} /> 목소리 입히기
                     </button>
                   )}
