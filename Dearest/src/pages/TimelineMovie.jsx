@@ -231,68 +231,70 @@ function TimelineMovie() {
       }
 
       ffmpeg.setProgress(({ ratio }) => {
-        setProgress(Math.min(Math.round(ratio * 95), 95));
+        let safeRatio = ratio;
+        if (isNaN(safeRatio) || safeRatio < 0) safeRatio = 0;
+        setProgress(Math.min(Math.round(safeRatio * 95), 95));
       });
 
-      // 자막용 폰트 로드
       try {
         const fontResponse = await fetch('/font.ttf');
         const fontBuffer = await fontResponse.arrayBuffer();
         await ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontBuffer));
-      } catch (e) {
-        console.warn("Font load failed:", e);
-      }
+      } catch (e) { console.warn("Font load failed:", e); }
 
-      let videoFilter = '';
-      let concatInput = '';
-      const args = [];
-      let inputCount = 0;
-
+      // 1. 개별 영상 순차 처리 (메모리 점유 최소화)
       for (let i = 0; i < videos.length; i++) {
         const video = videos[i];
-        const vInput = inputCount++;
-        await ffmpeg.FS('writeFile', `v_${i}.mp4`, await fetchFile(video.file));
-        args.push('-i', `v_${i}.mp4`);
-
-        let aInput = -1;
-        if (video.audioBlob) {
-          aInput = inputCount++;
-          const ext = video.audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
-          await ffmpeg.FS('writeFile', `a_${i}.${ext}`, await fetchFile(video.audioBlob));
-          args.push('-i', `a_${i}.${ext}`);
-        }
-
         const comment = video.comment || '';
         const escapedComment = comment.replace(/'/g, "").replace(/:/g, "\\:");
         
-        // 비디오 필터: 스케일링 + 패딩 + 자막
-        videoFilter += `[${vInput}:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v${i}];`;
+        await ffmpeg.FS('writeFile', `in_${i}.mp4`, await fetchFile(video.file));
         
-        // 오디오 필터: 녹음본이 없어도 무조건 무음 트랙을 생성하여 concat 오류 방지
-        if (aInput !== -1) {
-          videoFilter += `[${aInput}:a]anull[a${i}];`;
+        let filter = `[0:v]scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2,setsar=1${comment ? `,drawtext=fontfile=font.ttf:text='${escapedComment}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=h-200:box=1:boxcolor=black@0.4:boxborderw=10` : ''}[v];`;
+        
+        const segmentArgs = ['-i', `in_${i}.mp4` ];
+        
+        if (video.audioBlob) {
+          await ffmpeg.FS('writeFile', `au_${i}.webm`, await fetchFile(video.audioBlob));
+          segmentArgs.push('-i', `au_${i}.webm`);
+          filter += `[1:a]anull[a]`;
         } else {
-          // 원본 영상의 소리 유무와 상관없이 가상 무음 생성 (가장 안전함)
-          videoFilter += `aevalsrc=0:d=${video.duration}[a${i}];`;
+          // 오디오 없는 경우 무음 생성
+          segmentArgs.push('-f', 'lavfi', '-i', `anullsrc=r=44100:cl=stereo:d=${video.duration}`);
+          filter += `[1:a]trim=duration=${video.duration}[a]`;
         }
-        concatInput += `[v${i}][a${i}]`;
-      }
-      
-      videoFilter += `${concatInput}concat=n=${videos.length}:v=1:a=1[v_out][a_out]`;
-      args.push('-filter_complex', videoFilter, '-map', '[v_out]', '-map', '[a_out]', '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-r', '30', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', 'output.mp4');
 
-      await ffmpeg.run(...args);
-      
-      // 메모리 확보를 위해 가상 파일 시스템에서 입력 파일 즉시 삭제
-      for (let i = 0; i < videos.length; i++) {
-        try {
-          ffmpeg.FS('unlink', `v_${i}.mp4`);
-          if (videos[i].audioBlob) {
-            const ext = videos[i].audioBlob.type.split('/')[1]?.split(';')[0] || 'webm';
-            ffmpeg.FS('unlink', `a_${i}.${ext}`);
-          }
-        } catch (e) {}
+        await ffmpeg.run(
+          ...segmentArgs,
+          '-filter_complex', filter,
+          '-map', '[v]', '-map', '[a]',
+          '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+          '-r', '30', '-pix_fmt', 'yuv420p',
+          `temp_${i}.ts`
+        );
+
+        // 처리 완료된 원본 소스 즉시 삭제하여 메모리 확보
+        ffmpeg.FS('unlink', `in_${i}.mp4`);
+        if (video.audioBlob) ffmpeg.FS('unlink', `au_${i}.webm`);
+        
+        // 개별 진행률 업데이트
+        setProgress(Math.round(((i + 1) / videos.length) * 30)); 
       }
+
+      // 2. 가공된 TS 파일들을 하나로 결합 (매우 가벼운 작업)
+      const listContent = videos.map((_, i) => `file 'temp_${i}.ts'`).join('\n');
+      ffmpeg.FS('writeFile', 'list.txt', listContent);
+      
+      await ffmpeg.run(
+        '-f', 'concat', '-safe', '0', '-i', 'list.txt',
+        '-c', 'copy', '-movflags', '+faststart', 'output.mp4'
+      );
+
+      // 3. 임시 파일 정리
+      for (let i = 0; i < videos.length; i++) {
+        try { ffmpeg.FS('unlink', `temp_${i}.ts`); } catch(e) {}
+      }
+      ffmpeg.FS('unlink', 'list.txt');
 
       const data = ffmpeg.FS('readFile', 'output.mp4');
       const outBlob = new Blob([data.buffer], { type: 'video/mp4' });
@@ -308,7 +310,6 @@ function TimelineMovie() {
       const shareFileName = `${movieTitle || 'baby_movie'}.mp4`;
       const file = new File([outBlob], shareFileName, { type: 'video/mp4' });
 
-      // 모바일 공유하기 지원 여부 확인
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
@@ -327,7 +328,6 @@ function TimelineMovie() {
         a.click();
       }
       
-      // 결과 파일도 삭제하여 메모리 반환
       try { ffmpeg.FS('unlink', 'output.mp4'); } catch(e) {}
       
       alert('영상이 제작되었습니다!');
