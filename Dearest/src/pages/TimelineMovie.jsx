@@ -51,31 +51,57 @@ function TimelineMovie() {
     }
 
     try {
+      // 1. 기존 스트림 정리 (가장 확실한 방법)
+      if (window._currentStream) {
+        window._currentStream.getTracks().forEach(t => t.stop());
+        window._currentStream = null;
+      }
+
+      // 2. 권한 요청
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
+      window._currentStream = stream;
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      mediaRecorderRef.current.ondataavailable = (e) => {
+      
+      mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-      mediaRecorderRef.current.onstop = () => {
-        const mimeType = mediaRecorderRef.current.mimeType || 'audio/webm';
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        setVideos(prev => prev.map(v => v.id === videoId ? { ...v, audioBlob: blob, audioUrl: url } : v));
-        setRecordingVideoId(null);
+
+      mediaRecorder.onstop = () => {
+        try {
+          const mimeType = mediaRecorder.mimeType || 'audio/webm';
+          const blob = new Blob(audioChunksRef.current, { type: mimeType });
+          const url = URL.createObjectURL(blob);
+          setVideos(prev => prev.map(v => v.id === videoId ? { ...v, audioBlob: blob, audioUrl: url } : v));
+        } catch (e) {
+          console.error("Recording save failed:", e);
+        } finally {
+          setRecordingVideoId(null);
+          // 스트림 종료
+          stream.getTracks().forEach(t => t.stop());
+        }
       };
-      mediaRecorderRef.current.start();
+
+      // 3. 상태 업데이트 및 시작
       setRecordingVideoId(videoId);
+      mediaRecorder.start();
     } catch (err) {
       console.error('Recording start failed:', err);
-      alert('마이크 접근 권한이 필요합니다.');
+      alert('녹음 시작에 실패했습니다: ' + err.message);
+      setRecordingVideoId(null);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && recordingVideoId) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+    } catch (err) {
+      console.error('Stop recording failed:', err);
+      setRecordingVideoId(null);
     }
   };
 
