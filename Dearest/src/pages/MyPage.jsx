@@ -1,17 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Gift, Film, Loader2, PlayCircle, Image as ImageIcon, Share2 } from 'lucide-react';
+import { BookOpen, Gift, Film, Loader2, PlayCircle, Image as ImageIcon, Share2, CreditCard } from 'lucide-react';
 import './MyPage.css';
 
 function MyPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState('storybook');
   const [stories, setStories] = useState([]);
   const [timecapsules, setTimecapsules] = useState([]);
   const [movies, setMovies] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSharing, setIsSharing] = useState(false);
+
+  const getSubscriptionInfo = () => {
+    if (!profile?.is_subscribed) return null;
+    if (!profile?.subscribed_until) return { label: "프리미엄 회원" };
+    
+    const expiry = new Date(profile.subscribed_until);
+    const now = new Date();
+    const diffTime = expiry - now;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return {
+      date: expiry.toLocaleDateString(),
+      daysRemaining: diffDays,
+      isNearExpiry: diffDays <= 7
+    };
+  };
+
+  const subInfo = getSubscriptionInfo();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -244,6 +262,17 @@ function MyPage() {
       <div className="mypage-header">
         <h2>마이 아카이브 📚</h2>
         <p>지금까지 차곡차곡 모아온 우리 아이와의 소중한 기록들입니다.</p>
+        
+        {profile?.is_subscribed && subInfo && (
+          <div className={`subscription-status-banner ${subInfo.isNearExpiry ? 'expiry-warning' : ''}`}>
+            <CreditCard size={18} />
+            <span>
+              {subInfo.isNearExpiry 
+                ? `프리미엄 만료까지 ${subInfo.daysRemaining}일 남았습니다 (${subInfo.date} 만료)` 
+                : subInfo.date ? `프리미엄 회원 이용 중 (~${subInfo.date} 까지)` : "프리미엄 회원 이용 중"}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="tab-navigation">

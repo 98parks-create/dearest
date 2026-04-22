@@ -22,6 +22,34 @@
   font-size: 1.1rem;
 }
 
+.subscription-status-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #fff4f0;
+  color: var(--color-primary-peach);
+  padding: 0.8rem 1.5rem;
+  border-radius: 50px;
+  margin-top: 1.5rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  box-shadow: 0 4px 12px rgba(255, 138, 102, 0.1);
+  border: 1px solid rgba(255, 138, 102, 0.2);
+}
+
+.subscription-status-banner.expiry-warning {
+  background: #fff5f5;
+  color: #fa5252;
+  border-color: rgba(250, 82, 82, 0.2);
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(250, 82, 82, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(250, 82, 82, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(250, 82, 82, 0); }
+}
+
 .tab-navigation {
   display: flex;
   justify-content: center;

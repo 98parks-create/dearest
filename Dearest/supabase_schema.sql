@@ -7,6 +7,7 @@ CREATE TABLE public.profiles (
   is_admin BOOLEAN DEFAULT FALSE,
   is_approved BOOLEAN DEFAULT FALSE,
   is_subscribed BOOLEAN DEFAULT FALSE,
+  subscribed_until TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
 

@@ -76,7 +76,28 @@ export const AuthProvider = ({ children }) => {
         return;
       }
       
-      if (data) setProfile(data);
+      if (data) {
+        let profileData = data;
+        
+        // 구독 만료 여부 확인
+        if (data.is_subscribed && data.subscribed_until) {
+          const now = new Date();
+          const expiry = new Date(data.subscribed_until);
+          
+          if (now > expiry) {
+            // 만료됨 -> DB 업데이트 및 로컬 데이터 수정
+            await supabase
+              .from('profiles')
+              .update({ is_subscribed: false, subscribed_until: null })
+              .eq('id', userId);
+            
+            profileData = { ...data, is_subscribed: false, subscribed_until: null };
+            console.log('Subscription expired for user:', userId);
+          }
+        }
+        
+        setProfile(profileData);
+      }
     } catch (err) {
       console.warn('Error fetching profile:', err.message);
     }

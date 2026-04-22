@@ -33,14 +33,26 @@ function Admin() {
 
   const toggleStatus = async (userId, field, currentStatus) => {
     try {
+      let updateData = { [field]: !currentStatus };
+      
+      // 프리미엄 전환 시 1개월 뒤 만료일 설정
+      if (field === 'is_subscribed' && !currentStatus) {
+        const nextMonth = new Date();
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        updateData.subscribed_until = nextMonth.toISOString();
+      } else if (field === 'is_subscribed' && currentStatus) {
+        // 프리미엄 해제 시 만료일 제거
+        updateData.subscribed_until = null;
+      }
+
       const { error } = await supabase
         .from('profiles')
-        .update({ [field]: !currentStatus })
+        .update(updateData)
         .eq('id', userId);
         
       if (error) throw error;
       
-      setUsers(users.map(u => u.id === userId ? { ...u, [field]: !currentStatus } : u));
+      setUsers(users.map(u => u.id === userId ? { ...u, ...updateData } : u));
     } catch (err) {
       console.error(`Error updating ${field}:`, err);
       alert('상태 변경 중 오류가 발생했습니다.');
@@ -110,6 +122,11 @@ function Admin() {
                         <CreditCard size={14} />
                         {u.is_subscribed ? '프리미엄' : '일반'}
                       </button>
+                      {u.is_subscribed && u.subscribed_until && (
+                        <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '4px', textAlign: 'center' }}>
+                          ~{new Date(u.subscribed_until).toLocaleDateString()} 까지
+                        </div>
+                      )}
                     </td>
                     <td>
                       <button 
