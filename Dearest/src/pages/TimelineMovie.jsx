@@ -132,7 +132,9 @@ function TimelineMovie() {
     if (!files.length) return;
 
     setTimeout(async () => {
-      setIsUploading(true);
+      setIsExtracting(true);
+      setProgress(0);
+      setStatus('영상을 불러오는 중...');
       await new Promise(resolve => setTimeout(resolve, 200));
 
       const limitDuration = profile?.is_subscribed ? 600 : 15;
@@ -140,7 +142,9 @@ function TimelineMovie() {
         let currentVideos = [...videos];
         let currentTotalDuration = totalDuration;
 
-        for (const file of files) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          setStatus(`영상 읽는 중 (${i + 1}/${files.length})...`);
           const duration = await getVideoDuration(file);
           await new Promise(resolve => setTimeout(resolve, 50));
 
@@ -159,6 +163,7 @@ function TimelineMovie() {
             audioUrl: null
           });
           currentTotalDuration += duration;
+          setProgress(Math.round(((i + 1) / files.length) * 100));
         }
 
         setVideos(currentVideos);
@@ -167,7 +172,9 @@ function TimelineMovie() {
         console.error('Upload error:', error);
         alert('영상을 불러오는 중 오류가 발생했습니다.');
       } finally {
-        setIsUploading(false);
+        setIsExtracting(false);
+        setProgress(0);
+        setStatus('');
         e.target.value = '';
       }
     }, 500);
@@ -215,32 +222,32 @@ function TimelineMovie() {
     }
     setIsExtracting(true);
     setProgress(0);
-    setStatus('엔진 라이브러리 로드 중...');
+    setStatus('엔진 준비 중...');
     
     try {
-      // 1. FFmpeg 스크립트 강제 로드 (캐시 무시)
+      // 라이브러리 체크
       if (!window.FFmpeg) {
+        setStatus('엔진 라이브러리 로드 중...');
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
-          script.src = `https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js?v=${Date.now()}`;
+          script.src = "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js";
           script.onload = resolve;
-          script.onerror = () => reject(new Error('엔진 파일 로드 실패. 인터넷 연결을 확인해주세요.'));
+          script.onerror = () => reject(new Error('엔진 로드 실패'));
           document.head.appendChild(script);
         });
       }
 
       const { createFFmpeg } = window.FFmpeg;
       if (!ffmpegRef.current) {
-        setStatus('엔진 초기화 중...');
         ffmpegRef.current = createFFmpeg({
           log: true,
-          corePath: `https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js?v=${Date.now()}`
+          corePath: "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js"
         });
       }
       const ffmpeg = ffmpegRef.current;
 
       if (!ffmpeg.isLoaded()) {
-        setStatus('엔진 데이터 로딩 중 (잠시만 기다려주세요)...');
+        setStatus('엔진 데이터 로딩 중...');
         await ffmpeg.load();
       }
 
@@ -429,26 +436,19 @@ function TimelineMovie() {
         onChange={handleVideoUpload}
       />
 
-      {isUploading && (
-        <div className="processing-overlay">
-          <div className="processing-content">
-            <Loader2 className="spinner" size={48} />
-            <h2>영상을 불러오는 중입니다...</h2>
-            <p>영상 개수가 많거나 길면 시간이 소요될 수 있습니다. <br />잠시만 기다려 주세요.</p>
-          </div>
-        </div>
-      )}
-
       {isExtracting && (
         <div className="processing-overlay">
-          <div className="processing-content">
-            <Loader2 className="spinner" size={48} />
-            <h2>영상을 병합하는 중입니다...</h2>
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+          <div className="processing-content glass-panel">
+            <Loader2 className="spinner" size={56} color="var(--color-primary-peach)" />
+            <h2 style={{ marginTop: '1.5rem', marginBottom: '1rem' }}>영상을 처리하고 있습니다</h2>
+            <div className="progress-bar" style={{ width: '100%', maxWidth: '300px', height: '10px', background: '#eee', borderRadius: '5px', overflow: 'hidden', margin: '0 auto' }}>
+              <div className="progress-fill" style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg, var(--color-primary-peach), #ff9a9e)', transition: 'width 0.3s ease' }}></div>
             </div>
-            <p>{progress}% 완료</p>
-            <p className="status-text" style={{ fontSize: '0.9rem', color: '#666', marginTop: '0.5rem' }}>{status}</p>
+            <div style={{ marginTop: '1rem' }}>
+              <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--color-primary-peach)' }}>{progress}%</span>
+              <p className="status-text" style={{ fontSize: '1rem', color: '#555', marginTop: '0.5rem', fontWeight: '500' }}>{status}</p>
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#999', marginTop: '1.5rem' }}>페이지를 나가지 마세요. <br />영상이 길면 최대 몇 분 정도 소요될 수 있습니다.</p>
           </div>
         </div>
       )}
