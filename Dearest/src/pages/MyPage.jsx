@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../contexts/AuthContext';
-import { BookOpen, Gift, Film, Loader2, PlayCircle, Image as ImageIcon, Share2, CreditCard } from 'lucide-react';
+import { BookOpen, Gift, Film, Loader2, PlayCircle, Image as ImageIcon, Share2, CreditCard, X, Calendar, Clock } from 'lucide-react';
 import './MyPage.css';
 
 function MyPage() {
@@ -12,6 +12,7 @@ function MyPage() {
   const [movies, setMovies] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSharing, setIsSharing] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
 
   const getSubscriptionInfo = () => {
     if (!profile?.is_subscribed) return null;
@@ -122,7 +123,11 @@ function MyPage() {
     return (
       <div className="grid-container">
         {stories.map((story) => (
-          <div key={story.id} className="memory-card story-card glass-panel">
+          <div 
+            key={story.id} 
+            className="memory-card story-card glass-panel"
+            onClick={() => setSelectedItem({ type: 'storybook', data: story })}
+          >
             <div className="card-header">
               <span className="date-badge">{new Date(story.created_at).toLocaleDateString()}</span>
             </div>
@@ -136,7 +141,7 @@ function MyPage() {
             <div className="card-content">
               {story.text_content && <p className="card-text">"{story.text_content.substring(0, 50)}{story.text_content.length > 50 ? '...' : ''}"</p>}
               {story.audio_url && (
-                <div className="audio-player">
+                <div className="audio-player" onClick={(e) => e.stopPropagation()}>
                   <audio controls src={story.audio_url} style={{ width: '100%', height: '40px' }} crossOrigin="anonymous" />
                 </div>
               )}
@@ -158,7 +163,11 @@ function MyPage() {
           const isUnlocked = new Date(capsule.unlock_date).getTime() <= new Date().getTime();
           
           return (
-            <div key={capsule.id} className={`memory-card capsule-card glass-panel ${!isUnlocked ? 'locked-card' : ''}`}>
+            <div 
+              key={capsule.id} 
+              className={`memory-card capsule-card glass-panel ${!isUnlocked ? 'locked-card' : ''}`}
+              onClick={() => isUnlocked && setSelectedItem({ type: 'timecapsule', data: capsule })}
+            >
               <div className="card-header">
                 <span className="date-badge">오픈 예정일: {new Date(capsule.unlock_date).toLocaleDateString()}</span>
                 {!isUnlocked && <span className="status-badge locked">봉인 중 🔒</span>}
@@ -177,7 +186,7 @@ function MyPage() {
                   <div className="card-content">
                     {capsule.letter_text && <p className="card-text">"{capsule.letter_text.substring(0, 50)}..."</p>}
                     {capsule.audio_url && (
-                      <div className="audio-player">
+                      <div className="audio-player" onClick={(e) => e.stopPropagation()}>
                         <audio controls src={capsule.audio_url} style={{ width: '100%', height: '40px' }} crossOrigin="anonymous" />
                       </div>
                     )}
@@ -214,7 +223,11 @@ function MyPage() {
     return (
       <div className="grid-container">
         {movies.map((movie) => (
-          <div key={movie.id} className="memory-card movie-card glass-panel">
+          <div 
+            key={movie.id} 
+            className="memory-card movie-card glass-panel"
+            onClick={() => setSelectedItem({ type: 'movie', data: movie })}
+          >
             <div className="card-header">
               <span className="date-badge">{new Date(movie.created_at).toLocaleDateString()}</span>
             </div>
@@ -224,11 +237,12 @@ function MyPage() {
                 className="card-video" 
                 controls 
                 crossOrigin="anonymous"
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
             <div className="card-content">
               <p className="card-text" style={{fontWeight: 'bold', marginBottom: '1rem'}}>{movie.title || '성장 기록 영상'}</p>
-              <div className="movie-actions" style={{display: 'flex', gap: '8px'}}>
+              <div className="movie-actions" style={{display: 'flex', gap: '8px'}} onClick={(e) => e.stopPropagation()}>
                 <div 
                   role="button" 
                   className="btn btn-primary share-btn" 
@@ -301,6 +315,81 @@ function MyPage() {
         {activeTab === 'timecapsule' && renderTimecapsules()}
         {activeTab === 'timeline' && renderVideos()}
       </div>
+
+      {/* Detail Modal */}
+      {selectedItem && (
+        <div className="modal-overlay" onClick={() => setSelectedItem(null)}>
+          <div className="modal-container glass-panel" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setSelectedItem(null)}>
+              <X size={24} />
+            </button>
+            
+            <div className="modal-header">
+              <div className="modal-meta">
+                <span className="modal-tag">
+                  {selectedItem.type === 'storybook' ? <BookOpen size={14} /> : 
+                   selectedItem.type === 'timecapsule' ? <Gift size={14} /> : <Film size={14} />}
+                  {selectedItem.type === 'storybook' ? '보이스북' : 
+                   selectedItem.type === 'timecapsule' ? '타임캡슐' : '성장 영상'}
+                </span>
+                <span className="modal-date">
+                  <Calendar size={14} />
+                  {new Date(selectedItem.data.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              <h3 className="modal-title">
+                {selectedItem.type === 'movie' ? (selectedItem.data.title || '성장 기록 영상') : 
+                 selectedItem.type === 'storybook' ? '보이스북 기록' : '타임캡슐의 선물'}
+              </h3>
+            </div>
+
+            <div className="modal-body">
+              {selectedItem.type === 'movie' ? (
+                <div className="modal-media movie">
+                  <video src={selectedItem.data.video_url} controls autoPlay crossOrigin="anonymous" />
+                </div>
+              ) : (
+                <>
+                  {selectedItem.data.photo_url && (
+                    <div className="modal-media">
+                      <img src={selectedItem.data.photo_url} alt="Detail" crossOrigin="anonymous" />
+                    </div>
+                  )}
+                  <div className="modal-content-text">
+                    <p>"{selectedItem.type === 'storybook' ? selectedItem.data.text_content : selectedItem.data.letter_text}"</p>
+                  </div>
+                  {selectedItem.data.audio_url && (
+                    <div className="modal-audio">
+                      <audio controls src={selectedItem.data.audio_url} crossOrigin="anonymous" />
+                    </div>
+                  )}
+                </>
+              )}
+              
+              {selectedItem.type === 'timecapsule' && (
+                <div className="modal-footer-info">
+                  <Clock size={14} />
+                  <span>봉인 해제일: {new Date(selectedItem.data.unlock_date).toLocaleDateString()}</span>
+                </div>
+              )}
+            </div>
+
+            {selectedItem.type === 'movie' && (
+              <div className="modal-actions">
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => handleShare(selectedItem.data.video_url, selectedItem.data.title)}
+                >
+                  {isSharing ? <Loader2 className="spinner" size={16} /> : <><Share2 size={16} /> 공유하기</>}
+                </button>
+                <a href={selectedItem.data.video_url} download className="btn btn-secondary">
+                  다운로드
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
