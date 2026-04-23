@@ -360,7 +360,7 @@ function Storybook() {
           <div className="preview-area">
              {photo ? <img src={photo} alt="preview" className="mini-preview" crossOrigin="anonymous" /> : <div className="mini-preview" style={{background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center'}}><ImageIcon size={32} color="#aaa" /></div>}
              <div className="text-display" ref={textRef}>
-               {text || '작성하신 편지가 이곳에 립싱크처럼 표시됩니다.'}
+               {text || '작성하신 편지가 이곳에 문구 , 미리보기로 표시됩니다.'}
              </div>
              
              {audioUrl && (
