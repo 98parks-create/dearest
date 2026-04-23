@@ -291,7 +291,7 @@ function Storybook() {
   return (
     <div className="storybook-container">
       <div className="storybook-header">
-        <h2>인터랙티브 보이스북</h2>
+        <h2>보이스북</h2>
         <p>사진과 편지를 올리고, 부모님의 따뜻한 목소리를 입혀보세요.</p>
       </div>
 
